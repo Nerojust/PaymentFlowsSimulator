@@ -2,6 +2,7 @@ package com.nerojust.paymentsim.client
 
 import com.nerojust.paymentsim.client.api.PaymentApi
 import com.nerojust.paymentsim.client.api.dto.PaymentRequest
+import com.nerojust.paymentsim.client.api.dto.PaymentResponse
 import com.nerojust.paymentsim.client.db.PendingPaymentDao
 import com.nerojust.paymentsim.client.db.PendingPaymentEntity
 import com.nerojust.paymentsim.log.EventLog
@@ -51,8 +52,7 @@ class PaymentRepository(
             timestamp = now,
         )
 
-        if (_state.value is PaymentState.Success || _state.value is PaymentState.Failed) move(PaymentState.Idle)
-        if (_state.value !is PaymentState.Pending) move(PaymentState.Pending)
+        enterPending()
 
         if (inFlight == null) {
             dao.insert(payment) // persisted BEFORE any network call
@@ -121,6 +121,130 @@ class PaymentRepository(
         }
     }
 
+    private suspend fun reconcile(payment: PendingPaymentEntity, userConfirmed: Boolean) {
+        val key = payment.id.shortKey()
+        val ageMs = clock() - payment.timestamp
+        if (!userConfirmed && ageMs > ttlMs) {
+            // Never fire a stale payment silently: ask the user.
+            dao.updateStatus(payment.id, PaymentStatus.AWAITING_USER_CONFIRMATION, payment.lastError)
+            log.log(LogSource.CLIENT, "key $key is ${ageMs / 60_000} min old (past TTL): asking the user")
+            return
+        }
+        try {
+            enterConfirming()
+            log.log(LogSource.CLIENT, "reconcile: GET /payments/$key")
+            val response = api.getPayment(payment.id)
+            when {
+                settleFrom(payment, response.body()) -> Unit
+                response.code() == 404 -> {
+                    log.log(LogSource.CLIENT, "server never saw key $key: resending with the SAME key")
+                    if (!send(payment)) scheduleStatusCheck(payment)
+                }
+                // processing (or a 5xx): the server may still be charging. Do not resend.
+                else -> scheduleStatusCheck(payment)
+            }
+        } catch (e: IOException) {
+            noteNetworkError(payment, e)
+            scheduleStatusCheck(payment)
+        }
+    }
+
+    /**
+     * One POST with the payment's own key. Returns true when the payment reached a final state,
+     * false when the answer was 409 or 5xx and the caller should try again later. IOException propagates.
+     */
+    private suspend fun send(payment: PendingPaymentEntity): Boolean {
+        enterConfirming()
+        log.log(LogSource.CLIENT, "POST /payments key ${payment.id.shortKey()}")
+        val response = api.createPayment(
+            payment.id,
+            PaymentRequest(payment.amountMinor, CURRENCY, payment.recipient),
+        )
+        val code = response.code()
+        return when {
+            code == 201 -> settleFrom(payment, response.body())
+            code == 409 || code >= 500 -> {
+                dao.setLastError(payment.id, "HTTP $code")
+                log.log(LogSource.CLIENT, "HTTP $code for key ${payment.id.shortKey()}: will retry")
+                false
+            }
+            code == 422 -> {
+                log.log(LogSource.CLIENT, "!!! 422 REQUEST MISMATCH: key ${payment.id.shortKey()} was reused with a different request !!!")
+                fail(payment, REQUEST_MISMATCH)
+            }
+            else -> fail(payment, "HTTP $code")
+        }
+    }
+
+    // ---- settling: what the client does with the server's answer ----
+
+    /** The server's final answer settles the payment. Returns false when it has no final answer yet. */
+    private suspend fun settleFrom(payment: PendingPaymentEntity, answer: PaymentResponse?): Boolean =
+        when (answer?.status) {
+            STATUS_SUCCEEDED -> {
+                dao.updateStatus(payment.id, PaymentStatus.CONFIRMED, null)
+                move(PaymentState.Success)
+                true
+            }
+            // A real decline. Do not retry.
+            STATUS_FAILED -> fail(payment, answer.reason ?: "declined")
+            else -> false
+        }
+
+    private suspend fun fail(payment: PendingPaymentEntity, reason: String): Boolean {
+        dao.updateStatus(payment.id, PaymentStatus.FAILED, reason)
+        move(PaymentState.Failed(reason))
+        return true
+    }
+
+    private suspend fun markNeedsReconcile(payment: PendingPaymentEntity) {
+        dao.updateStatus(payment.id, PaymentStatus.NEEDS_RECONCILE, dao.find(payment.id)?.lastError)
+        log.log(LogSource.CLIENT, "key ${payment.id.shortKey()} -> needs_reconcile, handing over to WorkManager")
+    }
+
+    private suspend fun scheduleStatusCheck(payment: PendingPaymentEntity) {
+        markNeedsReconcile(payment)
+        move(PaymentState.Retrying)
+        enqueueRetryWorker(payment.id)
+    }
+
+    private suspend fun noteNetworkError(payment: PendingPaymentEntity, e: IOException) {
+        dao.setLastError(payment.id, e.message)
+        log.log(LogSource.CLIENT, "network error for key ${payment.id.shortKey()}: ${e.message}")
+    }
+
+    // ---- state machine bookkeeping: every change of the on-screen state goes through move() ----
+
+    /** Walks the state machine to Pending from wherever a new attempt may legally start. */
+    private fun enterPending() {
+        if (_state.value is PaymentState.Success || _state.value is PaymentState.Failed) move(PaymentState.Idle)
+        if (_state.value !is PaymentState.Pending) move(PaymentState.Pending)
+    }
+
+    private fun enterConfirming() {
+        if (_state.value is PaymentState.Confirming) return
+        enterPending()
+        move(PaymentState.Confirming)
+    }
+
+    private fun move(to: PaymentState) {
+        _state.value = transition(_state.value, to)
+        log.log(LogSource.CLIENT, "state -> ${to.label}")
+    }
+
+    private suspend fun <T> exclusive(block: suspend () -> T): T = mutex.withLock {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            // Abandoned mid-flight (reset, or WorkManager stopped the worker). The row stays in the queue
+            // for reconciliation; the on-screen state starts over.
+            _state.value = PaymentState.Idle
+            throw e
+        }
+    }
+
+    // ---- small helpers for the app start, the worker and the demo buttons ----
+
     suspend fun unsettledCount(): Int = dao.unsettled().size
 
     suspend fun isUnsettled(id: String): Boolean = dao.find(id)?.status in UNSETTLED
@@ -150,124 +274,6 @@ class PaymentRepository(
         _state.value = PaymentState.Idle
     }
 
-    private suspend fun reconcile(payment: PendingPaymentEntity, userConfirmed: Boolean) {
-        val key = payment.id.shortKey()
-        val ageMs = clock() - payment.timestamp
-        if (!userConfirmed && ageMs > ttlMs) {
-            // Never fire a stale payment silently: ask the user.
-            dao.updateStatus(payment.id, PaymentStatus.AWAITING_USER_CONFIRMATION, payment.lastError)
-            log.log(LogSource.CLIENT, "key $key is ${ageMs / 60_000} min old (past TTL): asking the user")
-            return
-        }
-        try {
-            enterConfirming()
-            log.log(LogSource.CLIENT, "reconcile: GET /payments/$key")
-            val response = api.getPayment(payment.id)
-            val body = response.body()
-            when (if (response.code() == 404) STATUS_NOT_FOUND else body?.status) {
-                STATUS_SUCCEEDED -> settle(payment, PaymentStatus.CONFIRMED, null, PaymentState.Success)
-                STATUS_FAILED -> {
-                    val reason = body?.reason ?: "declined"
-                    settle(payment, PaymentStatus.FAILED, reason, PaymentState.Failed(reason))
-                }
-                STATUS_NOT_FOUND -> {
-                    log.log(LogSource.CLIENT, "server never saw key $key: resending with the SAME key")
-                    if (!send(payment)) scheduleStatusCheck(payment)
-                }
-                // processing (or a 5xx): the server may still be charging. Do not resend.
-                else -> scheduleStatusCheck(payment)
-            }
-        } catch (e: IOException) {
-            noteNetworkError(payment, e)
-            scheduleStatusCheck(payment)
-        }
-    }
-
-    /**
-     * One POST with the payment's own key. Returns true when the payment reached a final state,
-     * false when the answer was 409 or 5xx and the caller should try again later. IOException propagates.
-     */
-    private suspend fun send(payment: PendingPaymentEntity): Boolean {
-        enterConfirming()
-        log.log(LogSource.CLIENT, "POST /payments key ${payment.id.shortKey()}")
-        val response = api.createPayment(
-            payment.id,
-            PaymentRequest(payment.amountMinor, CURRENCY, payment.recipient),
-        )
-        val code = response.code()
-        val body = response.body()
-        return when {
-            code == 201 && body?.status == STATUS_SUCCEEDED ->
-                settle(payment, PaymentStatus.CONFIRMED, null, PaymentState.Success)
-            code == 201 -> {
-                // A real decline. Do not retry.
-                val reason = body?.reason ?: "declined"
-                settle(payment, PaymentStatus.FAILED, reason, PaymentState.Failed(reason))
-            }
-            code == 409 || code >= 500 -> {
-                dao.setLastError(payment.id, "HTTP $code")
-                log.log(LogSource.CLIENT, "HTTP $code for key ${payment.id.shortKey()}: will retry")
-                false
-            }
-            code == 422 -> {
-                log.log(LogSource.CLIENT, "!!! 422 REQUEST MISMATCH: key ${payment.id.shortKey()} was reused with a different request !!!")
-                settle(payment, PaymentStatus.FAILED, REQUEST_MISMATCH, PaymentState.Failed(REQUEST_MISMATCH))
-            }
-            else -> settle(payment, PaymentStatus.FAILED, "HTTP $code", PaymentState.Failed("HTTP $code"))
-        }
-    }
-
-    private suspend fun settle(
-        payment: PendingPaymentEntity,
-        status: String,
-        error: String?,
-        state: PaymentState,
-    ): Boolean {
-        dao.updateStatus(payment.id, status, error)
-        move(state)
-        return true
-    }
-
-    private suspend fun markNeedsReconcile(payment: PendingPaymentEntity) {
-        dao.updateStatus(payment.id, PaymentStatus.NEEDS_RECONCILE, dao.find(payment.id)?.lastError)
-        log.log(LogSource.CLIENT, "key ${payment.id.shortKey()} -> needs_reconcile, handing over to WorkManager")
-    }
-
-    private suspend fun scheduleStatusCheck(payment: PendingPaymentEntity) {
-        markNeedsReconcile(payment)
-        move(PaymentState.Retrying)
-        enqueueRetryWorker(payment.id)
-    }
-
-    private suspend fun noteNetworkError(payment: PendingPaymentEntity, e: IOException) {
-        dao.setLastError(payment.id, e.message)
-        log.log(LogSource.CLIENT, "network error for key ${payment.id.shortKey()}: ${e.message}")
-    }
-
-    /** Walks the state machine to Confirming from wherever a new attempt may legally start. */
-    private fun enterConfirming() {
-        if (_state.value is PaymentState.Confirming) return
-        if (_state.value is PaymentState.Success || _state.value is PaymentState.Failed) move(PaymentState.Idle)
-        if (_state.value !is PaymentState.Pending) move(PaymentState.Pending)
-        move(PaymentState.Confirming)
-    }
-
-    private fun move(to: PaymentState) {
-        _state.value = transition(_state.value, to)
-        log.log(LogSource.CLIENT, "state -> ${to.label}")
-    }
-
-    private suspend fun <T> exclusive(block: suspend () -> T): T = mutex.withLock {
-        try {
-            block()
-        } catch (e: CancellationException) {
-            // Abandoned mid-flight (reset, or WorkManager stopped the worker). The row stays in the queue
-            // for reconciliation; the on-screen state starts over.
-            _state.value = PaymentState.Idle
-            throw e
-        }
-    }
-
     companion object {
         const val MAX_RETRIES = 5
         const val CURRENCY = "NGN"
@@ -278,7 +284,6 @@ class PaymentRepository(
 
         private const val STATUS_SUCCEEDED = "succeeded"
         private const val STATUS_FAILED = "failed"
-        private const val STATUS_NOT_FOUND = "not_found"
         private val UNSETTLED = setOf(PaymentStatus.PENDING, PaymentStatus.NEEDS_RECONCILE)
     }
 }
