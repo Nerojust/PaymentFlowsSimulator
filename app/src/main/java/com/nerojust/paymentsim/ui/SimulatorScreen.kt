@@ -3,12 +3,14 @@ package com.nerojust.paymentsim.ui
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -35,6 +37,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,12 +95,9 @@ fun SimulatorScreen(viewModel: SimulatorViewModel = viewModel { SimulatorViewMod
         !naiveLoading
     }
 
-    Scaffold { innerPadding ->
+    val content: @Composable (Modifier) -> Unit = { modifier ->
         Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(12.dp),
+            modifier = modifier.verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             ControlsCard(
@@ -139,7 +139,24 @@ fun SimulatorScreen(viewModel: SimulatorViewModel = viewModel { SimulatorViewMod
                     }
                 }
             }
-            EventLogPanel(events)
+        }
+    }
+
+    // The log is docked so it stays in view while the rest scrolls: at the bottom in portrait,
+    // on the right in landscape or on a projector.
+    Scaffold { innerPadding ->
+        BoxWithConstraints(Modifier.padding(innerPadding).padding(12.dp)) {
+            if (maxWidth >= 600.dp) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    content(Modifier.weight(1f))
+                    EventLogPanel(events, Modifier.weight(0.7f).fillMaxHeight())
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    content(Modifier.weight(1f))
+                    EventLogPanel(events, Modifier.fillMaxWidth().fillMaxHeight(LOG_DOCK_FRACTION))
+                }
+            }
         }
     }
 
@@ -170,7 +187,10 @@ private fun ControlsCard(
     Card {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Pick a scenario", style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 scenarios.forEach {
                     FilterChip(
                         selected = it == scenario,
@@ -279,6 +299,7 @@ private fun AdvancedControls(settings: NetworkSettings, viewModel: SimulatorView
 }
 
 private const val KEY_REUSE_SCENARIO = 7
+private const val LOG_DOCK_FRACTION = 0.3f // share of the screen height the docked log takes in portrait
 
 private val NetworkMode.label: String
     get() = when (this) {
@@ -383,12 +404,16 @@ private fun ServerLedgerPanel(ledger: List<LedgerEntryEntity>, modifier: Modifie
 }
 
 @Composable
-private fun EventLogPanel(events: List<LogEvent>) {
+private fun EventLogPanel(events: List<LogEvent>, modifier: Modifier = Modifier) {
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
-    Surface(color = DeckColors.LogBackground, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text("// event log, newest first", color = DeckColors.LogComment, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-            events.forEach { event ->
+    val scroll = rememberScrollState()
+    // Like a terminal: oldest at the top, and the view follows the newest line at the bottom.
+    // Keyed on maxValue because that only grows once the new line has been laid out.
+    LaunchedEffect(scroll.maxValue) { scroll.scrollTo(scroll.maxValue) }
+    Surface(color = DeckColors.LogBackground, shape = RoundedCornerShape(8.dp), modifier = modifier) {
+        Column(Modifier.verticalScroll(scroll).padding(12.dp)) {
+            Text("// event log", color = DeckColors.LogComment, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            events.asReversed().forEach { event ->
                 Text(
                     text = buildAnnotatedString {
                         withStyle(SpanStyle(color = DeckColors.LogComment)) {
