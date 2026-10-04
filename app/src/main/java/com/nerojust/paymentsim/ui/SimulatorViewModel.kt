@@ -55,12 +55,22 @@ class SimulatorViewModel(private val locator: ServiceLocator) : ViewModel() {
         if (mode != NetworkMode.OFFLINE) locator.scope.launch { locator.repository.reconcilePendingPayments() }
     }
 
-    fun setSafeClient(safe: Boolean) = locator.simulator.update { it.copy(safeClient = safe) }
+    /** Starts a scenario from a clean slate: wipes both databases, then applies its toggles. */
+    fun selectScenario(scenario: Scenario) {
+        viewModelScope.launch {
+            locator.resetAll()
+            locator.simulator.update { scenario.settings }
+            locator.log.log(LogSource.CLIENT, "Scenario ${scenario.number}: ${scenario.title}")
+        }
+    }
+
+    // Changing a toggle by hand leaves the scripted scenario, so its caption is dropped.
+    fun setSafeClient(safe: Boolean) = locator.simulator.update { it.copy(safeClient = safe, scenario = 0) }
 
     fun setServerIdempotency(enabled: Boolean) =
-        locator.simulator.update { it.copy(serverIdempotencyEnabled = enabled) }
+        locator.simulator.update { it.copy(serverIdempotencyEnabled = enabled, scenario = 0) }
 
-    fun setDropOnce(dropOnce: Boolean) = locator.simulator.update { it.copy(dropOnce = dropOnce) }
+    fun setDropOnce(dropOnce: Boolean) = locator.simulator.update { it.copy(dropOnce = dropOnce, scenario = 0) }
 
     /** Dialog "Send": the user confirmed the stale payment, so settle it (status check first, same key). */
     fun sendStalePayment(id: String) {

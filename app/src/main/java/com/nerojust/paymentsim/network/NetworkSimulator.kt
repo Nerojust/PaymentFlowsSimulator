@@ -17,6 +17,7 @@ data class NetworkSettings(
     val slowLatencyMs: Long = 4000,
     val dropOnce: Boolean = true,
     val safeClient: Boolean = true,
+    val scenario: Int = 0, // the preset picked on screen, 0 = none
 )
 
 /** Persisted demo settings plus the failure injection the interceptor applies around the fake server. */
@@ -86,6 +87,7 @@ class NetworkSimulator(private val prefs: SharedPreferences, private val log: Ev
             slowLatencyMs = prefs.getLong(KEY_SLOW_LATENCY, defaults.slowLatencyMs),
             dropOnce = prefs.getBoolean(KEY_DROP_ONCE, defaults.dropOnce),
             safeClient = prefs.getBoolean(KEY_SAFE_CLIENT, defaults.safeClient),
+            scenario = prefs.getInt(KEY_SCENARIO, defaults.scenario),
         )
     }
 
@@ -96,5 +98,6 @@ class NetworkSimulator(private val prefs: SharedPreferences, private val log: Ev
         const val KEY_SLOW_LATENCY = "slowLatencyMs"
         const val KEY_DROP_ONCE = "dropOnce"
         const val KEY_SAFE_CLIENT = "safeClient"
+        const val KEY_SCENARIO = "scenario"
     }
 }

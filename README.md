@@ -35,19 +35,24 @@ Open the folder in Android Studio and run the `app` configuration, or from a ter
 
 ## Presenter checklist
 
-Start every scenario with **Reset all data**. That restores the defaults: Safe client, server idempotency ON,
-ONLINE, drop once checked. Default amount is ₦1,250.00.
+Tap a scenario chip at the top of the screen. That wipes all data, sets every toggle and the amount for
+that scenario, and shows what to do next under the chips. The line below the hint shows the current setup
+(client, server idempotency, network). The coloured bar above the two panels is the verdict: red for a
+duplicate charge, teal for charges with no duplicates.
 
-| # | Slide | Toggles | Steps | What the audience sees |
-|---|---|---|---|---|
-| 1 | 2, 12 | **Naive**, idempotency **OFF**, **DROP_AFTER_PROCESSING**, drop once checked | Tap Pay. Badge shows the error. Tap Pay again. | Ledger shows 2 charges in red and the "Duplicate charge detected" banner. |
-| 2 | 13, 14 | **Safe**, idempotency **ON**, **DROP_AFTER_PROCESSING**, drop once checked | Tap Pay once. | Badge goes Pending, Confirming, Retrying, Success. Log shows the same key resent and "returning stored result, no new charge". Ledger: 1 charge. |
-| 3 | 8, 9, 11 | **Safe**, **OFFLINE** | Tap Pay. Watch the queue row and the 1s/2s/4s/8s/16s waits in the log. After the last wait the row becomes `needs_reconcile`. Tap **ONLINE**. | The payment settles immediately on the switch, ledger shows 1 charge. (Switch to ONLINE earlier and one of the retries succeeds instead.) |
-| 4 | 16, 17 | **Safe**, **SLOW** | Tap Pay, tap **Kill app** within 4 seconds, relaunch from the launcher. | First log line: "App restarted: reconciling 1 unsettled payments". Reconciliation asks the server, resends with the same key, ends in Success with 1 charge. |
-| 5 | 17 | **Safe**, **OFFLINE** | Tap Pay, wait at least 2 minutes (the demo TTL), tap **Kill app**, relaunch, tap **ONLINE**. | Dialog: "This payment from N min ago never completed. Send it now or cancel?" Ledger stays empty until you tap Send. |
-| 6 | 10 | **Safe**, **ONLINE** | Enter an amount above 50000 (for example 60000) and tap Pay. | Badge: FAILED: insufficient_funds. No retries in the log, 0 charges. |
-| 7 | 14 | **Safe**, idempotency **ON**, **ONLINE** | Tap Pay, wait for Success, then tap **Debug: same key, different amount**. | Log shows the server answering 422 and no new charge. |
-| 8 | 6 | none | Run `./gradlew test` (`PaymentStateTransitionTest`). | Success -> Failed is rejected. |
+| # | Slide | Chip | What the chip sets | Steps | What the audience sees |
+|---|---|---|---|---|---|
+| 1 | 2, 12 | Duplicate charge | Naive, idempotency OFF, lose one response | Tap Pay. Badge shows the error. Tap Pay again. | Red verdict "Duplicate charge detected", ledger shows 2 charges in red. |
+| 2 | 13, 14 | Safe retry | Safe, idempotency ON, lose one response | Tap Pay once. | Badge goes Pending, Confirming, Retrying, Success. Log shows the same key resent and "returning stored result, no new charge". Verdict: 1 charge, no duplicates. |
+| 3 | 8, 9, 11 | Offline queue | Safe, Offline | Tap Pay. Watch the queue row and the 1s/2s/4s/8s/16s waits in the log. After the last wait the row becomes `needs_reconcile`. Tap **Go online**. | The payment settles on the switch, 1 charge. (Tap Go online earlier and one of the retries succeeds instead.) |
+| 4 | 16, 17 | Crash mid-payment | Safe, Slow | Tap Pay, tap **Kill app** within 4 seconds, relaunch from the launcher. | First log line: "App restarted: reconciling 1 unsettled payments". Reconciliation asks the server, resends with the same key, ends in Success with 1 charge. |
+| 5 | 17 | Stale payment | Safe, Offline | Tap Pay, wait at least 2 minutes (the demo TTL), tap **Kill app**, relaunch, tap **Go online**. | Dialog: "This payment from N min ago never completed. Send it now or cancel?" Verdict stays "No charges yet" until you tap Send. |
+| 6 | 10 | Decline | Safe, Online, amount 60000 | Tap Pay. | Badge: FAILED: insufficient_funds. No retries in the log, 0 charges. |
+| 7 | 14 | Key reuse | Safe, idempotency ON, Online | Tap Pay, wait for Success, then tap **Reuse key, different amount**. | Log shows the server answering 422 and no new charge. |
+| 8 | 6 | none | none | Run `./gradlew test` (`PaymentStateTransitionTest`). | Success -> Failed is rejected. |
+
+**Advanced** opens the raw toggles (Naive/Safe, server idempotency, the five network modes, lose only one
+response) for going off script. Changing one by hand clears the scenario hint.
 
 Two extra variations worth showing if there is time, both covered by tests:
 
@@ -76,6 +81,8 @@ The patterns only work together.
 - **The server panel observes the server's Room Flow directly.** That panel is the audience looking inside
   the server. The payment clients (`PaymentRepository`, `NaivePaymentClient`) only reach the server through
   Retrofit. `GET /ledger` exists and the tests use it.
+- **The screen is organised around scenario chips**, not the control list in the build spec. The spec's
+  toggles are all still there under Advanced, and the duplicate banner became the verdict bar.
 - **Changing the network mode triggers reconciliation.** This stands in for a connectivity callback and keeps
   scenario 3 fast. Without it, the WorkManager backoff (10s minimum, doubling) decides when the payment settles.
 - **Retries are one initial attempt plus five retries**, with the loop kept in the slide's shape (try, catch,

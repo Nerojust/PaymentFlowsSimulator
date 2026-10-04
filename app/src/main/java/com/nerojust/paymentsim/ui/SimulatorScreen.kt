@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -106,6 +107,10 @@ fun SimulatorScreen(viewModel: SimulatorViewModel = viewModel { SimulatorViewMod
                 onRecipientChange = { recipient = it },
                 settings = settings,
                 payEnabled = payEnabled,
+                onScenario = {
+                    amountText = it.amount
+                    viewModel.selectScenario(it)
+                },
                 viewModel = viewModel,
             )
             if (settings.safeClient) {
@@ -120,6 +125,7 @@ fun SimulatorScreen(viewModel: SimulatorViewModel = viewModel { SimulatorViewMod
                     color = if (naiveError != null && !naiveLoading) DeckColors.Failure else DeckColors.Neutral,
                 )
             }
+            Verdict(ledger)
             BoxWithConstraints {
                 if (maxWidth >= 600.dp) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -155,10 +161,34 @@ private fun ControlsCard(
     onRecipientChange: (String) -> Unit,
     settings: NetworkSettings,
     payEnabled: Boolean,
+    onScenario: (Scenario) -> Unit,
     viewModel: SimulatorViewModel,
 ) {
+    var advancedOpen by rememberSaveable { mutableStateOf(false) }
+    val scenario = scenarios.firstOrNull { it.number == settings.scenario }
+
     Card {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Pick a scenario", style = MaterialTheme.typography.titleMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                scenarios.forEach {
+                    FilterChip(
+                        selected = it == scenario,
+                        onClick = { onScenario(it) },
+                        label = { Text("${it.number} · ${it.title}") },
+                    )
+                }
+            }
+            if (scenario != null) Text(scenario.hint, fontWeight = FontWeight.Medium)
+            // The whole setup in one line, so the audience never has to read the toggles.
+            Text(
+                text = (if (settings.safeClient) "Safe client" else "Naive client") +
+                    " · server idempotency ${if (settings.serverIdempotencyEnabled) "ON" else "OFF"}" +
+                    " · network: ${settings.mode.label}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = amountText,
@@ -177,58 +207,106 @@ private fun ControlsCard(
                 )
             }
 
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = !settings.safeClient,
-                    onClick = { viewModel.setSafeClient(false) },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                ) { Text("Naive") }
-                SegmentedButton(
-                    selected = settings.safeClient,
-                    onClick = { viewModel.setSafeClient(true) },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                ) { Text("Safe") }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Server idempotency", Modifier.weight(1f))
-                Switch(
-                    checked = settings.serverIdempotencyEnabled,
-                    onCheckedChange = viewModel::setServerIdempotency,
-                )
-            }
+            Button(
+                onClick = { viewModel.pay(amountText, recipient) },
+                enabled = payEnabled,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+            ) { Text("Pay", style = MaterialTheme.typography.titleMedium) }
 
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NetworkMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = settings.mode == mode,
-                        onClick = { viewModel.setMode(mode) },
-                        label = { Text(mode.name) },
-                    )
+                if (settings.mode != NetworkMode.ONLINE) {
+                    Button(onClick = { viewModel.setMode(NetworkMode.ONLINE) }) { Text("Go online") }
                 }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = settings.dropOnce, onCheckedChange = viewModel::setDropOnce)
-                Text("Drop once, then back to ONLINE")
-            }
-
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { viewModel.pay(amountText, recipient) },
-                    enabled = payEnabled,
-                ) { Text("Pay") }
+                if (settings.scenario == KEY_REUSE_SCENARIO || advancedOpen) {
+                    OutlinedButton(onClick = viewModel::debugReuseKeyWithDifferentAmount) {
+                        Text("Reuse key, different amount")
+                    }
+                }
                 OutlinedButton(
                     onClick = viewModel::killApp,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = DeckColors.Failure),
                 ) { Text("Kill app") }
                 OutlinedButton(onClick = viewModel::resetAll) { Text("Reset all data") }
-                TextButton(onClick = viewModel::debugReuseKeyWithDifferentAmount) {
-                    Text("Debug: same key, different amount")
+                TextButton(onClick = { advancedOpen = !advancedOpen }) {
+                    Text(if (advancedOpen) "Advanced ▴" else "Advanced ▾")
                 }
             }
+
+            if (advancedOpen) AdvancedControls(settings, viewModel)
         }
     }
+}
+
+/** The raw toggles, for going off script. The scenario chips set all of these in one tap. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun AdvancedControls(settings: NetworkSettings, viewModel: SimulatorViewModel) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SegmentedButton(
+            selected = !settings.safeClient,
+            onClick = { viewModel.setSafeClient(false) },
+            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+        ) { Text("Naive") }
+        SegmentedButton(
+            selected = settings.safeClient,
+            onClick = { viewModel.setSafeClient(true) },
+            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+        ) { Text("Safe") }
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Server idempotency", Modifier.weight(1f))
+        Switch(
+            checked = settings.serverIdempotencyEnabled,
+            onCheckedChange = viewModel::setServerIdempotency,
+        )
+    }
+
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        NetworkMode.entries.forEach { mode ->
+            FilterChip(
+                selected = settings.mode == mode,
+                onClick = { viewModel.setMode(mode) },
+                label = { Text(mode.label) },
+            )
+        }
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = settings.dropOnce, onCheckedChange = viewModel::setDropOnce)
+        Text("Lose only one response, then back to Online")
+    }
+}
+
+private const val KEY_REUSE_SCENARIO = 7
+
+private val NetworkMode.label: String
+    get() = when (this) {
+        NetworkMode.ONLINE -> "Online"
+        NetworkMode.OFFLINE -> "Offline"
+        NetworkMode.DROP_AFTER_PROCESSING -> "Lose response"
+        NetworkMode.SLOW -> "Slow"
+        NetworkMode.SERVER_ERROR -> "Server error"
+    }
+
+/** The one line the audience should read: did the customer pay once? */
+@Composable
+private fun Verdict(ledger: List<LedgerEntryEntity>) {
+    val duplicate = remember(ledger) { duplicateChargeIds(ledger).isNotEmpty() }
+    val (text, color) = when {
+        duplicate -> "Duplicate charge detected: the customer paid more than once" to DeckColors.Failure
+        ledger.isEmpty() -> "No charges yet" to DeckColors.Neutral
+        else -> "${ledger.size} charge${if (ledger.size == 1) "" else "s"}, no duplicates" to DeckColors.Fix
+    }
+    Text(
+        text = text,
+        color = Color.White,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(color, RoundedCornerShape(8.dp))
+            .padding(12.dp),
+    )
 }
 
 private fun stateColor(state: PaymentState): Color = when (state) {
@@ -288,17 +366,6 @@ private fun ServerLedgerPanel(ledger: List<LedgerEntryEntity>, modifier: Modifie
     Card(modifier) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Server ledger (charges: ${ledger.size})", style = MaterialTheme.typography.titleMedium)
-            if (duplicates.isNotEmpty()) {
-                Text(
-                    text = "Duplicate charge detected",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(DeckColors.Failure, RoundedCornerShape(4.dp))
-                        .padding(8.dp),
-                )
-            }
             if (ledger.isEmpty()) Text("no charges", color = DeckColors.LogComment)
             ledger.forEach { entry ->
                 val isDuplicate = entry.chargeId in duplicates
