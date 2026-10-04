@@ -1,26 +1,26 @@
 package com.nerojust.paymentsim.server
 
 import androidx.room.withTransaction
-import com.nerojust.paymentsim.client.api.dto.LedgerEntryDto
+import com.nerojust.paymentsim.client.api.dto.ChargeDto
 import com.nerojust.paymentsim.client.api.dto.PaymentRequest
 import com.nerojust.paymentsim.client.api.dto.PaymentResponse
 import com.nerojust.paymentsim.log.EventLog
 import com.nerojust.paymentsim.log.LogSource
 import com.nerojust.paymentsim.log.shortKey
 import com.nerojust.paymentsim.model.formatMinor
-import com.nerojust.paymentsim.network.NetworkSimulator
-import com.nerojust.paymentsim.server.db.LedgerEntryEntity
-import com.nerojust.paymentsim.server.db.ProcessedPaymentEntity
+import com.nerojust.paymentsim.network.FakeNetwork
+import com.nerojust.paymentsim.server.db.Charge
+import com.nerojust.paymentsim.server.db.RememberedPayment
 import com.nerojust.paymentsim.server.db.ServerDatabase
 import kotlinx.coroutines.delay
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 
-/** The payment backend, in process. Only [FakeBackendInterceptor] talks to it. */
+/** The payment backend, in process. Only [FakeServerInterceptor] talks to it. */
 class FakePaymentServer(
     private val db: ServerDatabase,
-    private val simulator: NetworkSimulator,
+    private val network: FakeNetwork,
     private val log: EventLog,
     private val json: Json,
     private val declineLimitMinor: Long = DEFAULT_DECLINE_LIMIT_MINOR,
@@ -32,7 +32,7 @@ class FakePaymentServer(
 
     // Slide 14
     suspend fun createPayment(idempotencyKey: String?, request: PaymentRequest): Reply {
-        val settings = simulator.settings.value
+        val settings = network.settings.value
 
         if (!settings.serverIdempotencyEnabled) {
             // No idempotency: every request that arrives is processed and charged again.
@@ -48,7 +48,7 @@ class FakePaymentServer(
         // Claim the key first: INSERT ... ON CONFLICT DO NOTHING
         val existing = db.withTransaction {
             val rowId = dao.claim(
-                ProcessedPaymentEntity(
+                RememberedPayment(
                     idempotencyKey = idempotencyKey,
                     requestHash = requestHash,
                     status = STATUS_PROCESSING,
@@ -63,22 +63,22 @@ class FakePaymentServer(
             val key = idempotencyKey.shortKey()
             return when {
                 existing.requestHash != requestHash -> {
-                    log.log(LogSource.SERVER, "422: key $key reused with a different request, no charge")
+                    log.log(LogSource.SERVER, "Key $key was already used for a different payment. Refused, no charge (422)")
                     Reply(422, encode(PaymentResponse(error = "key_reused_with_different_request")))
                 }
                 existing.status == STATUS_PROCESSING || existing.resultJson == null -> {
-                    log.log(LogSource.SERVER, "409: key $key is still processing")
+                    log.log(LogSource.SERVER, "Still busy with payment $key. Try later (409)")
                     Reply(409, encode(PaymentResponse(status = STATUS_PROCESSING)))
                 }
                 else -> {
                     // Never charge again.
-                    log.log(LogSource.SERVER, "key $key already ${existing.status}: returning stored result, no new charge")
+                    log.log(LogSource.SERVER, "Already saw payment $key. Sending back the saved answer. No new charge")
                     Reply(201, existing.resultJson)
                 }
             }
         }
 
-        log.log(LogSource.SERVER, "claimed key ${idempotencyKey.shortKey()}, processing")
+        log.log(LogSource.SERVER, "New payment ${idempotencyKey.shortKey()}. Working on it")
         delay(settings.processingDelayMs)
         // The charge and the stored result commit together, so a `processing` row always means "not charged".
         val resultJson = db.withTransaction {
@@ -95,9 +95,9 @@ class FakePaymentServer(
 
     suspend fun ledger(): Reply {
         val entries = dao.ledger().map {
-            LedgerEntryDto(it.chargeId, it.idempotencyKey, it.amountMinor, it.recipient, it.createdAt)
+            ChargeDto(it.chargeId, it.idempotencyKey, it.amountMinor, it.recipient, it.createdAt)
         }
-        return Reply(200, json.encodeToString(ListSerializer(LedgerEntryDto.serializer()), entries))
+        return Reply(200, json.encodeToString(ListSerializer(ChargeDto.serializer()), entries))
     }
 
     /**
@@ -107,7 +107,7 @@ class FakePaymentServer(
      */
     suspend fun releaseStuckClaims() {
         val released = dao.releaseProcessingClaims()
-        if (released > 0) log.log(LogSource.SERVER, "released $released claim(s) interrupted by the restart")
+        if (released > 0) log.log(LogSource.SERVER, "Cleared $released unfinished payment(s) left by the restart")
     }
 
     suspend fun reset() {
@@ -117,20 +117,20 @@ class FakePaymentServer(
 
     /** Decline rule, then exactly one ledger row on success. */
     private suspend fun charge(ledgerKey: String?, responseKey: String?, request: PaymentRequest): PaymentResponse {
-        val label = ledgerKey?.shortKey() ?: "no key"
+        val label = ledgerKey?.let { "key ${it.shortKey()}" } ?: "no key"
         if (request.amountMinor > declineLimitMinor) {
-            log.log(LogSource.SERVER, "declined ${formatMinor(request.amountMinor)} ($label): $REASON_INSUFFICIENT_FUNDS")
+            log.log(LogSource.SERVER, "Said no to ${formatMinor(request.amountMinor)} ($label): not enough money")
             return PaymentResponse(key = responseKey, status = STATUS_FAILED, reason = REASON_INSUFFICIENT_FUNDS)
         }
         val chargeId = dao.insertLedger(
-            LedgerEntryEntity(
+            Charge(
                 idempotencyKey = ledgerKey,
                 amountMinor = request.amountMinor,
                 recipient = request.recipient,
                 createdAt = clock(),
             ),
         )
-        log.log(LogSource.SERVER, "charged ${formatMinor(request.amountMinor)} -> charge #$chargeId ($label)")
+        log.log(LogSource.SERVER, "Charged ${formatMinor(request.amountMinor)}. This is charge #$chargeId ($label)")
         return PaymentResponse(key = responseKey, status = STATUS_SUCCEEDED, chargeId = chargeId)
     }
 

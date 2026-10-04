@@ -1,7 +1,7 @@
 package com.nerojust.paymentsim.model
 
 /** Client-side status of a row in `pending_payments`. */
-object PaymentStatus {
+object PendingPaymentStatus {
     const val PENDING = "pending"
     const val CONFIRMED = "confirmed"
     const val FAILED = "failed"

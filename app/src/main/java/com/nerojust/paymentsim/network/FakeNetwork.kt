@@ -10,25 +10,25 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.updateAndGet
 import java.io.IOException
 
-data class NetworkSettings(
+data class DemoSettings(
     val mode: NetworkMode = NetworkMode.ONLINE,
     val serverIdempotencyEnabled: Boolean = true,
     val processingDelayMs: Long = 1500,
     val slowLatencyMs: Long = 4000,
     val dropOnce: Boolean = true,
-    val safeClient: Boolean = true,
+    val useSafeClient: Boolean = true,
     val scenario: Int = 0, // the preset picked on screen, 0 = none
 )
 
 /** Persisted demo settings plus the failure injection the interceptor applies around the fake server. */
-class NetworkSimulator(private val prefs: SharedPreferences, private val log: EventLog) {
+class FakeNetwork(private val prefs: SharedPreferences, private val log: EventLog) {
 
     private val _settings = MutableStateFlow(load())
-    val settings: StateFlow<NetworkSettings> = _settings.asStateFlow()
+    val settings: StateFlow<DemoSettings> = _settings.asStateFlow()
 
     fun isSimulatedOffline(): Boolean = settings.value.mode == NetworkMode.OFFLINE
 
-    fun update(transform: (NetworkSettings) -> NetworkSettings) {
+    fun update(transform: (DemoSettings) -> DemoSettings) {
         val updated = _settings.updateAndGet(transform)
         // commit, not apply: "Kill app" can follow a toggle within milliseconds and the setting must survive it.
         prefs.edit(commit = true) {
@@ -37,7 +37,7 @@ class NetworkSimulator(private val prefs: SharedPreferences, private val log: Ev
             putLong(KEY_PROCESSING_DELAY, updated.processingDelayMs)
             putLong(KEY_SLOW_LATENCY, updated.slowLatencyMs)
             putBoolean(KEY_DROP_ONCE, updated.dropOnce)
-            putBoolean(KEY_SAFE_CLIENT, updated.safeClient)
+            putBoolean(KEY_SAFE_CLIENT, updated.useSafeClient)
         }
     }
 
@@ -49,15 +49,15 @@ class NetworkSimulator(private val prefs: SharedPreferences, private val log: Ev
         val current = settings.value
         when (current.mode) {
             NetworkMode.OFFLINE -> {
-                log.log(LogSource.NET, "offline: $what never reached the server")
-                throw IOException("Simulated offline")
+                log.log(LogSource.NET, "No internet. The request for $what never reached the server")
+                throw IOException("No internet")
             }
             NetworkMode.SERVER_ERROR -> {
-                log.log(LogSource.NET, "500 for $what, server did not process it")
+                log.log(LogSource.NET, "The server had an error (500) on $what. Nothing was charged")
                 return false
             }
             NetworkMode.SLOW -> {
-                log.log(LogSource.NET, "slow network: holding $what for ${current.slowLatencyMs}ms")
+                log.log(LogSource.NET, "Slow internet. Holding $what for ${current.slowLatencyMs / 1000} seconds")
                 Thread.sleep(current.slowLatencyMs)
             }
             NetworkMode.ONLINE, NetworkMode.DROP_AFTER_PROCESSING -> Unit
@@ -69,16 +69,16 @@ class NetworkSimulator(private val prefs: SharedPreferences, private val log: Ev
     fun afterServer(what: String, code: Int) {
         val current = settings.value
         if (current.mode != NetworkMode.DROP_AFTER_PROCESSING) {
-            log.log(LogSource.NET, "delivered $what -> $code")
+            log.log(LogSource.NET, "The answer for $what arrived ($code)")
             return
         }
         if (current.dropOnce) update { it.copy(mode = NetworkMode.ONLINE) }
-        log.log(LogSource.NET, "dropped response after server processed $what (it answered $code)")
-        throw IOException("Simulated: response lost")
+        log.log(LogSource.NET, "The server finished $what, but its answer got lost on the way back")
+        throw IOException("The server's answer got lost")
     }
 
-    private fun load() = NetworkSettings().let { defaults ->
-        NetworkSettings(
+    private fun load() = DemoSettings().let { defaults ->
+        DemoSettings(
             mode = prefs.getString(KEY_MODE, null)
                 ?.let { name -> NetworkMode.entries.firstOrNull { it.name == name } }
                 ?: defaults.mode,
@@ -86,7 +86,7 @@ class NetworkSimulator(private val prefs: SharedPreferences, private val log: Ev
             processingDelayMs = prefs.getLong(KEY_PROCESSING_DELAY, defaults.processingDelayMs),
             slowLatencyMs = prefs.getLong(KEY_SLOW_LATENCY, defaults.slowLatencyMs),
             dropOnce = prefs.getBoolean(KEY_DROP_ONCE, defaults.dropOnce),
-            safeClient = prefs.getBoolean(KEY_SAFE_CLIENT, defaults.safeClient),
+            useSafeClient = prefs.getBoolean(KEY_SAFE_CLIENT, defaults.useSafeClient),
             scenario = prefs.getInt(KEY_SCENARIO, defaults.scenario),
         )
     }

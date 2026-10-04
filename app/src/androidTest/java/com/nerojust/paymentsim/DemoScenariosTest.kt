@@ -5,9 +5,9 @@ import app.cash.turbine.test
 import com.nerojust.paymentsim.TestHarness.Companion.AMOUNT
 import com.nerojust.paymentsim.TestHarness.Companion.RECIPIENT
 import com.nerojust.paymentsim.TestHarness.Companion.REQUEST
-import com.nerojust.paymentsim.client.PaymentRepository
+import com.nerojust.paymentsim.client.SafePaymentClient
 import com.nerojust.paymentsim.model.PaymentState
-import com.nerojust.paymentsim.model.PaymentStatus
+import com.nerojust.paymentsim.model.PendingPaymentStatus
 import com.nerojust.paymentsim.network.NetworkMode
 import com.nerojust.paymentsim.server.FakePaymentServer
 import com.nerojust.paymentsim.ui.duplicateChargeIds
@@ -18,7 +18,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** The demo scenarios from the README, end to end through Retrofit, the interceptor and the simulator. */
+/** The demo scenarios from the README, end to end through Retrofit, the interceptor and the network. */
 @RunWith(AndroidJUnit4::class)
 class DemoScenariosTest {
 
@@ -32,7 +32,7 @@ class DemoScenariosTest {
         harness.configure {
             it.copy(mode = NetworkMode.DROP_AFTER_PROCESSING, dropOnce = true, serverIdempotencyEnabled = false)
         }
-        val naive = harness.locator.naiveClient
+        val naive = harness.deps.naiveClient
 
         naive.pay(AMOUNT, RECIPIENT)        // charged, response lost, "failed"
         assertEquals(false, naive.isLoading.value) // so the user can tap again
@@ -48,8 +48,8 @@ class DemoScenariosTest {
         // A fresh key per tap defeats server-side idempotency: the patterns only work together.
         harness.configure { it.copy(mode = NetworkMode.DROP_AFTER_PROCESSING, dropOnce = true) }
 
-        harness.locator.naiveClient.pay(AMOUNT, RECIPIENT)
-        harness.locator.naiveClient.pay(AMOUNT, RECIPIENT)
+        harness.deps.naiveClient.pay(AMOUNT, RECIPIENT)
+        harness.deps.naiveClient.pay(AMOUNT, RECIPIENT)
 
         assertEquals(2, harness.ledger().size)
     }
@@ -58,9 +58,9 @@ class DemoScenariosTest {
     fun scenario2_safeClientWithIdempotency_retriesWithSameKeyAndChargesOnce() = runTest {
         harness.configure { it.copy(mode = NetworkMode.DROP_AFTER_PROCESSING, dropOnce = true) }
 
-        harness.repository.state.test {
+        harness.safeClient.state.test {
             assertEquals(PaymentState.Idle, awaitItem())
-            val id = harness.repository.initiatePayment(AMOUNT, RECIPIENT)
+            val id = harness.safeClient.initiatePayment(AMOUNT, RECIPIENT)
 
             assertEquals(PaymentState.Pending, awaitItem())
             assertEquals(PaymentState.Confirming, awaitItem())
@@ -70,7 +70,7 @@ class DemoScenariosTest {
             assertEquals(PaymentState.Success, awaitItem())   // server returned the stored result
             assertEquals(listOf(id), harness.ledger().map { it.idempotencyKey })
         }
-        assertTrue(harness.logMessages().any { it.contains("returning stored result, no new charge") })
+        assertTrue(harness.logMessages().any { it.contains("Sending back the saved answer. No new charge") })
     }
 
     @Test
@@ -79,7 +79,7 @@ class DemoScenariosTest {
             it.copy(mode = NetworkMode.DROP_AFTER_PROCESSING, dropOnce = true, serverIdempotencyEnabled = false)
         }
 
-        harness.repository.initiatePayment(AMOUNT, RECIPIENT)
+        harness.safeClient.initiatePayment(AMOUNT, RECIPIENT)
 
         assertEquals(2, harness.ledger().size)
     }
@@ -88,72 +88,72 @@ class DemoScenariosTest {
     fun scenario3_offlineThenOnline_queuesBacksOffAndSettlesWithOneCharge() = runTest {
         harness.configure { it.copy(mode = NetworkMode.OFFLINE) }
 
-        val id = harness.repository.initiatePayment(AMOUNT, RECIPIENT)
-        assertEquals(PaymentStatus.NEEDS_RECONCILE, harness.payment(id).status)
+        val id = harness.safeClient.initiatePayment(AMOUNT, RECIPIENT)
+        assertEquals(PendingPaymentStatus.NEEDS_RECONCILE, harness.payment(id).status)
         assertEquals(listOf(id), harness.enqueuedWorkers)
 
         harness.configure { it.copy(mode = NetworkMode.ONLINE) }
-        harness.repository.reconcilePendingPayments() // what the worker / connectivity change runs
+        harness.safeClient.reconcilePendingPayments() // what the worker / connectivity change runs
 
-        assertEquals(PaymentStatus.CONFIRMED, harness.payment(id).status)
-        assertEquals(PaymentState.Success, harness.repository.state.value)
+        assertEquals(PendingPaymentStatus.CONFIRMED, harness.payment(id).status)
+        assertEquals(PaymentState.Success, harness.safeClient.state.value)
         assertEquals(1, harness.ledger().size)
     }
 
     @Test
     fun scenario4_killedBeforeTheServerSawIt_reconcilesOnRelaunchWithOneCharge() = runTest {
         harness.configure { it.copy(mode = NetworkMode.OFFLINE) }
-        val id = harness.repository.initiatePayment(AMOUNT, RECIPIENT)
+        val id = harness.safeClient.initiatePayment(AMOUNT, RECIPIENT)
         harness.configure { it.copy(mode = NetworkMode.SLOW) }
 
         val relaunched = harness.relaunch() // process died: state machine and log are gone, databases are not
-        assertEquals(PaymentState.Idle, relaunched.repository.state.value)
-        assertEquals(1, relaunched.repository.unsettledCount())
-        relaunched.repository.reconcilePendingPayments()
+        assertEquals(PaymentState.Idle, relaunched.safeClient.state.value)
+        assertEquals(1, relaunched.safeClient.unsettledCount())
+        relaunched.safeClient.reconcilePendingPayments()
 
-        assertEquals(PaymentStatus.CONFIRMED, harness.payment(id).status)
-        assertEquals(PaymentState.Success, relaunched.repository.state.value)
+        assertEquals(PendingPaymentStatus.CONFIRMED, harness.payment(id).status)
+        assertEquals(PaymentState.Success, relaunched.safeClient.state.value)
         assertEquals(1, harness.ledger().size)
     }
 
     @Test
     fun scenario4b_killedAfterTheServerChargedIt_reconcilesOnRelaunchWithoutASecondCharge() = runTest {
         harness.configure { it.copy(mode = NetworkMode.OFFLINE) }
-        val id = harness.repository.initiatePayment(AMOUNT, RECIPIENT)
+        val id = harness.safeClient.initiatePayment(AMOUNT, RECIPIENT)
         harness.configure { it.copy(mode = NetworkMode.ONLINE) }
         harness.api.createPayment(id, REQUEST) // the request that was in flight when the app died
 
         val relaunched = harness.relaunch()
-        relaunched.repository.reconcilePendingPayments()
+        relaunched.safeClient.reconcilePendingPayments()
 
-        assertEquals(PaymentStatus.CONFIRMED, harness.payment(id).status)
+        assertEquals(PendingPaymentStatus.CONFIRMED, harness.payment(id).status)
         assertEquals(1, harness.ledger().size)
     }
 
     @Test
     fun scenario5_stalePayment_isNotChargedUntilTheUserTapsSend() = runTest {
         harness.configure { it.copy(mode = NetworkMode.OFFLINE) }
-        val id = harness.repository.initiatePayment(AMOUNT, RECIPIENT)
+        val id = harness.safeClient.initiatePayment(AMOUNT, RECIPIENT)
 
-        harness.now += PaymentRepository.DEFAULT_TTL_MS + 60_000 // wait past the TTL
+        harness.now += SafePaymentClient.DEFAULT_TTL_MS + 60_000 // wait past the TTL
         val relaunched = harness.relaunch()
         harness.configure { it.copy(mode = NetworkMode.ONLINE) }
-        relaunched.repository.reconcilePendingPayments()
+        relaunched.safeClient.reconcilePendingPayments()
 
-        assertEquals(PaymentStatus.AWAITING_USER_CONFIRMATION, harness.payment(id).status) // dialog is showing
+        assertEquals(PendingPaymentStatus.AWAITING_USER_CONFIRMATION, harness.payment(id).status) // dialog is showing
         assertEquals(0, harness.ledger().size)
 
-        relaunched.repository.reconcilePayment(id, userConfirmed = true) // "Send"
+        relaunched.safeClient.reconcilePayment(id, userConfirmed = true) // "Send"
 
-        assertEquals(PaymentStatus.CONFIRMED, harness.payment(id).status)
+        assertEquals(PendingPaymentStatus.CONFIRMED, harness.payment(id).status)
         assertEquals(1, harness.ledger().size)
     }
 
     @Test
     fun scenario6_declinedPayment_failsWithoutRetriesOrCharges() = runTest {
-        val id = harness.repository.initiatePayment(FakePaymentServer.DEFAULT_DECLINE_LIMIT_MINOR + 1, RECIPIENT)
+        val id = harness.safeClient.initiatePayment(FakePaymentServer.DEFAULT_DECLINE_LIMIT_MINOR + 1, RECIPIENT)
 
-        assertEquals(PaymentState.Failed("insufficient_funds"), harness.repository.state.value)
+        assertEquals(PaymentState.Failed("insufficient_funds"), harness.safeClient.state.value)
         assertEquals(0, harness.payment(id).retryCount)
         assertTrue(harness.logMessages().none { it.contains("waiting") })
         assertEquals(0, harness.ledger().size)
@@ -161,13 +161,13 @@ class DemoScenariosTest {
 
     @Test
     fun scenario7_sameKeyWithDifferentAmount_returns422AndDoesNotCharge() = runTest {
-        val id = harness.repository.initiatePayment(AMOUNT, RECIPIENT)
+        val id = harness.safeClient.initiatePayment(AMOUNT, RECIPIENT)
 
         val response = harness.api.createPayment(id, REQUEST.copy(amountMinor = AMOUNT + 100))
-        harness.repository.debugReuseKeyWithDifferentAmount() // the on-screen debug button
+        harness.safeClient.debugReuseKeyWithDifferentAmount() // the on-screen debug button
 
         assertEquals(422, response.code())
-        assertTrue(harness.logMessages().any { it.contains("-> HTTP 422") })
+        assertTrue(harness.logMessages().any { it.contains("The server said: 422") })
         assertEquals(1, harness.ledger().size) // only the original payment
     }
 }

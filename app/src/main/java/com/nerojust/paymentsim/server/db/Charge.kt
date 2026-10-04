@@ -5,7 +5,7 @@ import androidx.room.PrimaryKey
 
 // Slide 14
 @Entity(tableName = "ledger")
-data class LedgerEntryEntity(
+data class Charge(
     @PrimaryKey(autoGenerate = true) val chargeId: Long = 0,
     val idempotencyKey: String?, // null when idempotency is off
     val amountMinor: Long,

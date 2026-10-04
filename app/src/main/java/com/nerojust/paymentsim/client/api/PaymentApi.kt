@@ -1,6 +1,6 @@
 package com.nerojust.paymentsim.client.api
 
-import com.nerojust.paymentsim.client.api.dto.LedgerEntryDto
+import com.nerojust.paymentsim.client.api.dto.ChargeDto
 import com.nerojust.paymentsim.client.api.dto.PaymentRequest
 import com.nerojust.paymentsim.client.api.dto.PaymentResponse
 import retrofit2.Response
@@ -22,5 +22,5 @@ interface PaymentApi {
     suspend fun getPayment(@Path("key") key: String): Response<PaymentResponse>
 
     @GET("ledger")
-    suspend fun ledger(): List<LedgerEntryDto>
+    suspend fun ledger(): List<ChargeDto>
 }

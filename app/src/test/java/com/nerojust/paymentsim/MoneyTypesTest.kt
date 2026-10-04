@@ -2,7 +2,7 @@ package com.nerojust.paymentsim
 
 import com.nerojust.paymentsim.model.formatMinor
 import com.nerojust.paymentsim.model.parseAmountMinor
-import com.nerojust.paymentsim.server.db.LedgerEntryEntity
+import com.nerojust.paymentsim.server.db.Charge
 import com.nerojust.paymentsim.ui.duplicateChargeIds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -63,5 +63,5 @@ class MoneyTypesTest {
     }
 
     private fun charge(id: Long, amountMinor: Long, recipient: String, createdAt: Long) =
-        LedgerEntryEntity(id, idempotencyKey = null, amountMinor = amountMinor, recipient = recipient, createdAt = createdAt)
+        Charge(id, idempotencyKey = null, amountMinor = amountMinor, recipient = recipient, createdAt = createdAt)
 }

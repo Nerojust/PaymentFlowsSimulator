@@ -6,12 +6,12 @@ import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.workDataOf
 import com.nerojust.paymentsim.TestHarness.Companion.AMOUNT
 import com.nerojust.paymentsim.TestHarness.Companion.RECIPIENT
-import com.nerojust.paymentsim.client.db.PendingPaymentEntity
-import com.nerojust.paymentsim.client.work.RetryPaymentWorker
-import com.nerojust.paymentsim.di.ServiceLocator
-import com.nerojust.paymentsim.model.PaymentStatus
+import com.nerojust.paymentsim.client.db.PendingPayment
+import com.nerojust.paymentsim.client.work.BackgroundRetryWorker
+import com.nerojust.paymentsim.di.AppDependencies
+import com.nerojust.paymentsim.model.PendingPaymentStatus
 import com.nerojust.paymentsim.network.NetworkMode
-import com.nerojust.paymentsim.server.db.ProcessedPaymentEntity
+import com.nerojust.paymentsim.server.db.RememberedPayment
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -20,31 +20,31 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
-class RetryPaymentWorkerTest {
+class BackgroundRetryWorkerTest {
 
     private val harness = TestHarness()
-    private lateinit var appLocator: ServiceLocator
+    private lateinit var appLocator: AppDependencies
 
     @Before
     fun setUp() {
-        appLocator = ServiceLocator.instance
-        ServiceLocator.instance = harness.locator
+        appLocator = AppDependencies.instance
+        AppDependencies.instance = harness.deps
         runBlocking {
             harness.clientDb.pendingPaymentDao().insert(
-                PendingPaymentEntity(ID, AMOUNT, RECIPIENT, harness.now, PaymentStatus.NEEDS_RECONCILE),
+                PendingPayment(ID, AMOUNT, RECIPIENT, harness.now, PendingPaymentStatus.NEEDS_RECONCILE),
             )
         }
     }
 
     @After
     fun tearDown() {
-        ServiceLocator.instance = appLocator
+        AppDependencies.instance = appLocator
         harness.close()
     }
 
     private fun runWorker(paymentId: String? = ID): Result = runBlocking {
-        TestListenableWorkerBuilder<RetryPaymentWorker>(harness.context)
-            .apply { if (paymentId != null) setInputData(workDataOf(RetryPaymentWorker.KEY_PAYMENT_ID to paymentId)) }
+        TestListenableWorkerBuilder<BackgroundRetryWorker>(harness.context)
+            .apply { if (paymentId != null) setInputData(workDataOf(BackgroundRetryWorker.KEY_PAYMENT_ID to paymentId)) }
             .build()
             .doWork()
     }
@@ -56,7 +56,7 @@ class RetryPaymentWorkerTest {
         assertEquals(Result.retry(), runWorker())
 
         runBlocking {
-            assertEquals(PaymentStatus.NEEDS_RECONCILE, harness.payment(ID).status)
+            assertEquals(PendingPaymentStatus.NEEDS_RECONCILE, harness.payment(ID).status)
             assertEquals(0, harness.ledger().size)
         }
     }
@@ -66,7 +66,7 @@ class RetryPaymentWorkerTest {
         assertEquals(Result.success(), runWorker())
 
         runBlocking {
-            assertEquals(PaymentStatus.CONFIRMED, harness.payment(ID).status)
+            assertEquals(PendingPaymentStatus.CONFIRMED, harness.payment(ID).status)
             assertEquals(listOf(ID), harness.ledger().map { it.idempotencyKey })
         }
     }
@@ -74,7 +74,7 @@ class RetryPaymentWorkerTest {
     @Test
     fun doWork_serverStillProcessing_retriesAndDoesNotResend() {
         runBlocking {
-            harness.serverDb.serverDao().claim(ProcessedPaymentEntity(ID, "hash", "processing", null, harness.now))
+            harness.serverDb.serverDao().claim(RememberedPayment(ID, "hash", "processing", null, harness.now))
         }
 
         assertEquals(Result.retry(), runWorker())

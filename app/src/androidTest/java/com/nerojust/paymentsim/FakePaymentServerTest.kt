@@ -3,7 +3,7 @@ package com.nerojust.paymentsim
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nerojust.paymentsim.TestHarness.Companion.REQUEST
 import com.nerojust.paymentsim.server.FakePaymentServer
-import com.nerojust.paymentsim.server.db.ProcessedPaymentEntity
+import com.nerojust.paymentsim.server.db.RememberedPayment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
 class FakePaymentServerTest {
 
     private val harness = TestHarness()
-    private val server get() = harness.locator.server
+    private val server get() = harness.deps.server
 
     @After
     fun tearDown() = harness.close()
@@ -65,7 +65,7 @@ class FakePaymentServerTest {
         val firstReply = server.createPayment("probe", REQUEST)
         assertEquals(201, firstReply.code)
         val hash = harness.serverDb.serverDao().find("probe")!!.requestHash
-        harness.serverDb.serverDao().claim(ProcessedPaymentEntity("key-1", hash, "processing", null, harness.now))
+        harness.serverDb.serverDao().claim(RememberedPayment("key-1", hash, "processing", null, harness.now))
 
         val reply = server.createPayment("key-1", REQUEST)
 
@@ -129,7 +129,7 @@ class FakePaymentServerTest {
 
     @Test
     fun releaseStuckClaims_processingRow_isDroppedSoTheSameKeyCanBeResent() = runTest {
-        harness.serverDb.serverDao().claim(ProcessedPaymentEntity("key-1", "any", "processing", null, harness.now))
+        harness.serverDb.serverDao().claim(RememberedPayment("key-1", "any", "processing", null, harness.now))
 
         server.releaseStuckClaims()
         val reply = server.createPayment("key-1", REQUEST)

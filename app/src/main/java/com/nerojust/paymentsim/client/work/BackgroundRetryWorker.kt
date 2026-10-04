@@ -11,34 +11,34 @@ import androidx.work.WorkManager
 import androidx.work.WorkRequest
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.nerojust.paymentsim.di.ServiceLocator
+import com.nerojust.paymentsim.di.AppDependencies
 import com.nerojust.paymentsim.log.LogSource
 import com.nerojust.paymentsim.log.shortKey
 import java.util.concurrent.TimeUnit
 
 /** Slide 11: finishes a payment after the in-app retries gave up. It reconciles, it never blindly resends. */
-class RetryPaymentWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+class BackgroundRetryWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val locator = ServiceLocator.instance
+        val deps = AppDependencies.instance
         val paymentId = inputData.getString(KEY_PAYMENT_ID) ?: return Result.failure()
 
-        // The CONNECTED constraint only knows about real connectivity, so ask the simulator too.
-        if (locator.simulator.isSimulatedOffline()) {
-            locator.log.log(LogSource.WORKER, "still (simulated) offline, will retry key ${paymentId.shortKey()}")
+        // The CONNECTED constraint only knows about real connectivity, so ask the network too.
+        if (deps.network.isSimulatedOffline()) {
+            deps.log.log(LogSource.WORKER, "Still no internet. Will check payment ${paymentId.shortKey()} later")
             return Result.retry()
         }
 
-        locator.log.log(LogSource.WORKER, "reconciling key ${paymentId.shortKey()}")
-        locator.repository.reconcilePayment(paymentId)
-        return if (locator.repository.isUnsettled(paymentId)) Result.retry() else Result.success()
+        deps.log.log(LogSource.WORKER, "Checking payment ${paymentId.shortKey()} in the background")
+        deps.safeClient.reconcilePayment(paymentId)
+        return if (deps.safeClient.isUnsettled(paymentId)) Result.retry() else Result.success()
     }
 
     companion object {
         const val KEY_PAYMENT_ID = "paymentId"
 
         fun enqueue(context: Context, paymentId: String) {
-            val request = OneTimeWorkRequestBuilder<RetryPaymentWorker>()
+            val request = OneTimeWorkRequestBuilder<BackgroundRetryWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(
                     BackoffPolicy.EXPONENTIAL,

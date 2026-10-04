@@ -5,13 +5,13 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.nerojust.paymentsim.client.api.dto.PaymentRequest
 import com.nerojust.paymentsim.client.db.ClientDatabase
-import com.nerojust.paymentsim.client.db.PendingPaymentEntity
-import com.nerojust.paymentsim.di.ServiceLocator
-import com.nerojust.paymentsim.network.NetworkSettings
+import com.nerojust.paymentsim.client.db.PendingPayment
+import com.nerojust.paymentsim.di.AppDependencies
+import com.nerojust.paymentsim.network.DemoSettings
 import com.nerojust.paymentsim.server.db.ServerDatabase
 
 /**
- * The real object graph (Retrofit -> interceptor -> simulator -> fake server) on in-memory databases,
+ * The real object graph (Retrofit -> interceptor -> network -> fake server) on in-memory databases,
  * with a controllable clock and a recording stand-in for WorkManager.
  */
 class TestHarness {
@@ -25,33 +25,33 @@ class TestHarness {
     private val prefs = context.getSharedPreferences("test_network_simulator", Context.MODE_PRIVATE)
         .also { it.edit().clear().commit() }
 
-    var locator = newLocator()
+    var deps = newDependencies()
         private set
 
-    val repository get() = locator.repository
-    val api get() = locator.api
+    val safeClient get() = deps.safeClient
+    val api get() = deps.api
 
     init {
         configure { it.copy(processingDelayMs = 0, slowLatencyMs = 0) }
     }
 
-    fun configure(transform: (NetworkSettings) -> NetworkSettings) = locator.simulator.update(transform)
+    fun configure(transform: (DemoSettings) -> DemoSettings) = deps.network.update(transform)
 
     /** What "Kill app" + relaunch does: a new graph over the same databases and settings. */
-    fun relaunch(): ServiceLocator = newLocator().also { locator = it }
+    fun relaunch(): AppDependencies = newDependencies().also { deps = it }
 
-    suspend fun payment(id: String): PendingPaymentEntity = clientDb.pendingPaymentDao().find(id)!!
+    suspend fun payment(id: String): PendingPayment = clientDb.pendingPaymentDao().find(id)!!
 
     suspend fun ledger() = api.ledger()
 
-    fun logMessages(): List<String> = locator.log.events.value.reversed().map { it.message }
+    fun logMessages(): List<String> = deps.log.events.value.reversed().map { it.message }
 
     fun close() {
         clientDb.close()
         serverDb.close()
     }
 
-    private fun newLocator() = ServiceLocator(
+    private fun newDependencies() = AppDependencies(
         context = context,
         clientDb = clientDb,
         serverDb = serverDb,

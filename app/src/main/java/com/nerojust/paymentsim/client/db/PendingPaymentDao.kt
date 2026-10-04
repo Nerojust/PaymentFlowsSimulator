@@ -9,21 +9,21 @@ import kotlinx.coroutines.flow.Flow
 interface PendingPaymentDao {
 
     @Insert
-    suspend fun insert(payment: PendingPaymentEntity)
+    suspend fun insert(payment: PendingPayment)
 
     @Query("SELECT * FROM pending_payments ORDER BY timestamp DESC")
-    fun observeAll(): Flow<List<PendingPaymentEntity>>
+    fun observeAll(): Flow<List<PendingPayment>>
 
     @Query("SELECT * FROM pending_payments WHERE id = :id")
-    suspend fun find(id: String): PendingPaymentEntity?
+    suspend fun find(id: String): PendingPayment?
 
     @Query("SELECT * FROM pending_payments ORDER BY timestamp DESC LIMIT 1")
-    suspend fun latest(): PendingPaymentEntity?
+    suspend fun latest(): PendingPayment?
 
     @Query(
         "SELECT * FROM pending_payments WHERE status IN ('pending', 'needs_reconcile') ORDER BY timestamp",
     )
-    suspend fun unsettled(): List<PendingPaymentEntity>
+    suspend fun unsettled(): List<PendingPayment>
 
     /** The same user intent that is still in flight, if any. */
     @Query(
@@ -31,7 +31,7 @@ interface PendingPaymentDao {
             "AND status IN ('pending', 'needs_reconcile') AND timestamp >= :since " +
             "ORDER BY timestamp DESC LIMIT 1",
     )
-    suspend fun findInFlight(amountMinor: Long, recipient: String, since: Long): PendingPaymentEntity?
+    suspend fun findInFlight(amountMinor: Long, recipient: String, since: Long): PendingPayment?
 
     @Query("UPDATE pending_payments SET status = :status, lastError = :lastError WHERE id = :id")
     suspend fun updateStatus(id: String, status: String, lastError: String?)

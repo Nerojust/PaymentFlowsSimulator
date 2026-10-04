@@ -20,7 +20,7 @@ data class PaymentResponse(
 )
 
 @Serializable
-data class LedgerEntryDto(
+data class ChargeDto(
     val chargeId: Long,
     val idempotencyKey: String? = null,
     val amountMinor: Long,

@@ -2,7 +2,7 @@ package com.nerojust.paymentsim.server
 
 import com.nerojust.paymentsim.client.api.dto.PaymentRequest
 import com.nerojust.paymentsim.log.shortKey
-import com.nerojust.paymentsim.network.NetworkSimulator
+import com.nerojust.paymentsim.network.FakeNetwork
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
@@ -17,9 +17,9 @@ import okio.Buffer
  * Answers every request itself and never calls chain.proceed, so nothing leaves the device.
  * Retrofit sees exactly what a real app would see: responses, 500s and IOExceptions.
  */
-class FakeBackendInterceptor(
+class FakeServerInterceptor(
     private val server: FakePaymentServer,
-    private val simulator: NetworkSimulator,
+    private val network: FakeNetwork,
     private val json: Json,
 ) : Interceptor {
 
@@ -33,14 +33,14 @@ class FakeBackendInterceptor(
         }
 
         val key = request.header(HEADER_IDEMPOTENCY_KEY) ?: path.substringAfterLast('/')
-        val what = "${request.method} /payments key ${key.shortKey()}"
+        val what = if (request.method == "POST") "payment ${key.shortKey()}" else "the check on payment ${key.shortKey()}"
 
-        if (!simulator.beforeServer(what)) {
+        if (!network.beforeServer(what)) {
             return respond(request, FakePaymentServer.Reply(500, """{"error":"internal_server_error"}"""))
         }
         // Blocking is fine here: OkHttp runs interceptors on its own dispatcher threads.
         val reply = runBlocking { route(request, path) }
-        simulator.afterServer(what, reply.code)
+        network.afterServer(what, reply.code)
         return respond(request, reply)
     }
 

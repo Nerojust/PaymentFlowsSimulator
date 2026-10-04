@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 
 /** A separate "server.db" so the server's memory survives client "crashes". The client never opens it. */
 @Database(
-    entities = [ProcessedPaymentEntity::class, LedgerEntryEntity::class],
+    entities = [RememberedPayment::class, Charge::class],
     version = 1,
     exportSchema = false,
 )

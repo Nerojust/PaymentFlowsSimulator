@@ -11,10 +11,10 @@ interface ServerDao {
 
     /** INSERT ... ON CONFLICT DO NOTHING. Returns -1 when the key was already claimed. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun claim(row: ProcessedPaymentEntity): Long
+    suspend fun claim(row: RememberedPayment): Long
 
     @Query("SELECT * FROM processed_payments WHERE idempotencyKey = :key")
-    suspend fun find(key: String): ProcessedPaymentEntity?
+    suspend fun find(key: String): RememberedPayment?
 
     @Query("UPDATE processed_payments SET status = :status, resultJson = :resultJson WHERE idempotencyKey = :key")
     suspend fun complete(key: String, status: String, resultJson: String)
@@ -23,13 +23,13 @@ interface ServerDao {
     suspend fun releaseProcessingClaims(): Int
 
     @Insert
-    suspend fun insertLedger(entry: LedgerEntryEntity): Long
+    suspend fun insertLedger(entry: Charge): Long
 
     @Query("SELECT * FROM ledger ORDER BY chargeId DESC")
-    fun observeLedger(): Flow<List<LedgerEntryEntity>>
+    fun observeLedger(): Flow<List<Charge>>
 
     @Query("SELECT * FROM ledger ORDER BY chargeId DESC")
-    suspend fun ledger(): List<LedgerEntryEntity>
+    suspend fun ledger(): List<Charge>
 
     @Query("DELETE FROM processed_payments")
     suspend fun clearProcessed()
