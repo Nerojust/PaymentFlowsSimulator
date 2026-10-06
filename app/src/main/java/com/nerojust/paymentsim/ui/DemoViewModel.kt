@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -137,8 +139,13 @@ class DemoViewModel(private val deps: AppDependencies) : ViewModel() {
 
     /** Simulates a crash. Both databases and the network settings are on disk, the event log is not. */
     fun killApp() {
+        deps.network.update { it.copy(crashedOnPurpose = true) }
         Process.killProcess(Process.myPid())
     }
+
+    /** Waits for the note the app start leaves after a crash, and hands it out once. */
+    suspend fun awaitRestartNote(): String =
+        deps.restartNote.filterNotNull().first().also { deps.restartNote.value = null }
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L

@@ -18,6 +18,7 @@ data class DemoSettings(
     val dropOnce: Boolean = true,
     val useSafeClient: Boolean = true,
     val scenario: Int = 0, // the preset picked on screen, 0 = none
+    val crashedOnPurpose: Boolean = false, // set by "Crash the app", so the next start can say what it found
 )
 
 /** Persisted demo settings plus the failure injection the interceptor applies around the fake server. */
@@ -38,6 +39,8 @@ class FakeNetwork(private val prefs: SharedPreferences, private val log: EventLo
             putLong(KEY_SLOW_LATENCY, updated.slowLatencyMs)
             putBoolean(KEY_DROP_ONCE, updated.dropOnce)
             putBoolean(KEY_SAFE_CLIENT, updated.useSafeClient)
+            putInt(KEY_SCENARIO, updated.scenario)
+            putBoolean(KEY_CRASHED, updated.crashedOnPurpose)
         }
     }
 
@@ -88,6 +91,7 @@ class FakeNetwork(private val prefs: SharedPreferences, private val log: EventLo
             dropOnce = prefs.getBoolean(KEY_DROP_ONCE, defaults.dropOnce),
             useSafeClient = prefs.getBoolean(KEY_SAFE_CLIENT, defaults.useSafeClient),
             scenario = prefs.getInt(KEY_SCENARIO, defaults.scenario),
+            crashedOnPurpose = prefs.getBoolean(KEY_CRASHED, defaults.crashedOnPurpose),
         )
     }
 
@@ -99,5 +103,6 @@ class FakeNetwork(private val prefs: SharedPreferences, private val log: EventLo
         const val KEY_DROP_ONCE = "dropOnce"
         const val KEY_SAFE_CLIENT = "safeClient"
         const val KEY_SCENARIO = "scenario"
+        const val KEY_CRASHED = "crashedOnPurpose"
     }
 }

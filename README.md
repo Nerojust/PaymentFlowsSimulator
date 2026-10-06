@@ -44,13 +44,13 @@ state and has the **Go online** button. The badge under Pay shows the state mach
 
 | # | Slide | Chip | What the chip sets | Steps | What the audience sees |
 |---|---|---|---|---|---|
-| 1 | 2, 12 | Double charge | Careless, bank forgets keys, lose one answer | Tap Pay. The badge shows the error. Tap Pay again. | Red line "Problem: you were charged more than once for one payment". Payments tab: nothing saved on the phone, 2 charges at the bank marked "Charged twice". |
+| 1 | 2, 12 | Double charge | Careless, bank forgets keys, lose one answer | Tap Pay. The badge shows the error. Tap Pay again. | Red line "Problem: you were charged more than once". Payments tab: nothing saved on the phone, 2 charges at the bank marked "Charged twice". |
 | 2 | 13, 14 | Safe retry | Careful, bank remembers keys, lose one answer | Tap Pay once. | Badge goes "Saved on this phone", "Asking the bank…", "No answer yet. Trying again", "Paid" (state names in small print). What happened: "Already saw payment ... Sending back the saved answer. No new charge". Payments tab: 1 charge. |
 | 3 | 8, 9, 11 | No internet | Careful, no internet | Tap Pay. Open What happened to watch the 1s/2s/4s/8s/16s waits. Go back to Pay and tap **Go online**. | The payment settles on the switch, 1 charge. (Tap Go online earlier and one of the tries succeeds instead.) |
-| 4 | 16, 17 | App crash | Careful, slow internet | Tap Pay, tap **Crash the app** within 4 seconds, open the app again. | First log line: "App restarted. Checking 1 unfinished payment(s)". The app asks the bank, sends again with the same key, ends in Paid with 1 charge. |
-| 5 | 17 | Forgotten payment | Careful, no internet | Tap Pay, wait at least 2 minutes (the demo TTL), tap **Crash the app**, open the app again, tap **Go online**. | Dialog "Forgotten payment found". Nothing is charged until you tap **Send it**. |
+| 4 | 16, 17 | App crash | Careful, slow internet | Tap Pay, tap **Crash the app** while the status still says "Asking the bank…" (about 4 seconds), open the app again. | First log line: "App restarted. Checking 1 unfinished payment(s)". The app asks the bank, sends again with the same key, ends in Paid with 1 charge. |
+| 5 | 17 | Forgotten payment | Careful, no internet | Tap Pay, wait at least 2 minutes (the demo TTL), tap **Crash the app**, open the app again. Tap **Send it**, then **Go online**. | Dialog "Forgotten payment found" as soon as the app opens. Nothing is charged until you tap **Send it**, and it asks only once. 1 charge. |
 | 6 | 10 | Not enough money | Careful, internet working, amount 60000 | Tap Pay. | Badge: "Not paid: not enough money", FAILED in small print. No tries in the log, 0 charges. |
-| 7 | 14 | Sneaky amount change | Careful, bank remembers keys | Tap Pay, wait for Paid, then tap **Reuse key with a different amount**. | What happened: "The bank refused it". Still 1 charge. |
+| 7 | 14 | Sneaky amount change | Careful, bank remembers keys | Tap Pay, wait for Paid, then tap **Reuse key** (it sends the same key with a bigger amount). | What happened: "The bank refused it". Still 1 charge. |
 | 8 | 8, 9 | Many payments | Careful, no internet | Tap Pay, change the amount, tap Pay again, a few times. Open **Payments**. Then tap **Go online** on the Pay tab. | Payments tab shows each one "Saved on phone", the tab badge counts them, and after Go online each is "Paid" with exactly one charge. |
 
 The state machine check (slide 6, Success -> Failed is rejected) is a unit test: run `./gradlew test`

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -72,7 +73,10 @@ fun DemoScreen(viewModel: DemoViewModel = viewModel { DemoViewModel(AppDependenc
     val events by viewModel.events.collectAsStateWithLifecycle()
 
     var tab by rememberSaveable { mutableStateOf(Tab.PAY) }
-    var amountText by rememberSaveable { mutableStateOf("1250.00") }
+    // After a crash the picked demo comes back from disk, so its amount has to come back with it.
+    var amountText by rememberSaveable {
+        mutableStateOf(scenarios.firstOrNull { it.number == settings.scenario }?.amount ?: "1250.00")
+    }
     var recipient by rememberSaveable { mutableStateOf("Pizza place") }
     var menuOpen by remember { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -84,9 +88,9 @@ fun DemoScreen(viewModel: DemoViewModel = viewModel { DemoViewModel(AppDependenc
     LaunchedEffect(Unit) {
         viewModel.messages.collectLatest { snackbar.showSnackbar(it, duration = SnackbarDuration.Long) }
     }
+    LaunchedEffect(Unit) { snackbar.showSnackbar(viewModel.awaitRestartNote(), duration = SnackbarDuration.Long) }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("Payment demo") },
@@ -165,6 +169,11 @@ fun DemoScreen(viewModel: DemoViewModel = viewModel { DemoViewModel(AppDependenc
             )
             Tab.PAYMENTS -> PaymentsTab(queue, ledger, modifier)
             Tab.LOG -> LogTab(events, modifier.padding(bottom = 12.dp))
+        }
+        // At the top, not the usual bottom: down there a note sits on the Crash button and the status
+        // for the very seconds they are needed.
+        Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.TopCenter) {
+            SnackbarHost(snackbar)
         }
     }
 

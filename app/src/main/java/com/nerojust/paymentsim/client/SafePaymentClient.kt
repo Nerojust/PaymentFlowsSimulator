@@ -117,7 +117,11 @@ class SafePaymentClient(
         val payment = dao.find(id) ?: return@exclusive
         val reconcilable = payment.status in UNSETTLED ||
             (userConfirmed && payment.status == PendingPaymentStatus.AWAITING_USER_CONFIRMATION)
-        if (reconcilable) reconcile(payment, userConfirmed)
+        if (!reconcilable) return@exclusive
+        // "Send it" is the user saying "I still want this" right now. Restart the clock, so a try that
+        // fails (still offline) is not asked about a second time.
+        if (userConfirmed) dao.setTimestamp(id, clock())
+        reconcile(payment, userConfirmed)
     }
 
     /** The dialog's "Cancel": the stale payment is dropped and never sent. */

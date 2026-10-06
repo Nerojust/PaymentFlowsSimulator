@@ -58,75 +58,85 @@ fun PayTab(
 ) {
     val scenario = scenarios.firstOrNull { it.number == settings.scenario }
 
-    Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Card {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Pick a demo", style = MaterialTheme.typography.titleMedium)
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    scenarios.forEach {
-                        FilterChip(
-                            selected = it == scenario,
-                            onClick = { onScenario(it) },
-                            label = { Text("${it.number} · ${it.title}") },
-                        )
+    // The outcome (status, and the "charged twice" line) is pinned under the scrolling part, so a long hint
+    // or a small screen can never push it out of sight.
+    Column(modifier.padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Card {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        scenarios.forEach {
+                            FilterChip(
+                                selected = it == scenario,
+                                onClick = { onScenario(it) },
+                                label = { Text("${it.number} · ${it.title}") },
+                            )
+                        }
                     }
+                    Text(scenario?.hint ?: "Pick a demo above, or just tap Pay.", fontWeight = FontWeight.Medium)
+                    scenario?.let { Text("Why it matters: ${it.why}") }
+                    Text(
+                        text = (if (settings.useSafeClient) "Careful app" else "Careless app") + " · " +
+                            (if (settings.serverIdempotencyEnabled) "the bank remembers keys" else "the bank forgets keys") +
+                            "\nA key is a name tag on each payment, to spot repeats.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                Text(scenario?.hint ?: "Pick a demo above, or just tap Pay.", fontWeight = FontWeight.Medium)
-                scenario?.let { Text("Why it matters: ${it.why}") }
-                Text(
-                    text = (if (settings.useSafeClient) "Careful app" else "Careless app") + " · " +
-                        (if (settings.serverIdempotencyEnabled) "the bank remembers keys" else "the bank forgets keys") +
-                        "\nA key is a name tag the phone puts on each payment, so the bank can spot a repeat.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            }
+
+            NetworkStrip(settings.mode, onGoOnline = { viewModel.setMode(NetworkMode.ONLINE) })
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = onAmountChange,
+                    label = { Text("Amount (₦)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = recipient,
+                    onValueChange = onRecipientChange,
+                    label = { Text("Pay to") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
                 )
             }
-        }
 
-        NetworkStrip(settings.mode, onGoOnline = { viewModel.setMode(NetworkMode.ONLINE) })
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = amountText,
-                onValueChange = onAmountChange,
-                label = { Text("Amount (₦)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.weight(1f),
-            )
-            OutlinedTextField(
-                value = recipient,
-                onValueChange = onRecipientChange,
-                label = { Text("Pay to") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        Button(
-            onClick = { viewModel.pay(amountText, recipient) },
-            // The Safe app saves every tap, so Pay stays on and payments can stack up.
-            // The Naive app only has its loading flag.
-            enabled = settings.useSafeClient || !naiveLoading,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-        ) { Text("Pay", style = MaterialTheme.typography.titleMedium) }
-
-        // Only the buttons the picked demo needs. Everything else is under Menu.
-        if (settings.scenario in CRASH_SCENARIOS) {
-            OutlinedButton(
-                onClick = viewModel::killApp,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = DeckColors.Failure),
-            ) { Text("Crash the app") }
-        }
-        if (settings.scenario == KEY_REUSE_SCENARIO) {
-            OutlinedButton(onClick = viewModel::debugReuseKeyWithDifferentAmount) {
-                Text("Reuse key with a different amount")
+            // Only the buttons the picked demo needs. Everything else is under Menu.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(
+                    onClick = { viewModel.pay(amountText, recipient) },
+                    // The Safe app saves every tap, so Pay stays on and payments can stack up.
+                    // The Naive app only has its loading flag.
+                    enabled = settings.useSafeClient || !naiveLoading,
+                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                ) { Text("Pay", style = MaterialTheme.typography.titleMedium) }
+                // Next to Pay, because it has to be tapped within seconds of it.
+                if (settings.scenario in CRASH_SCENARIOS) {
+                    OutlinedButton(
+                        onClick = viewModel::killApp,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = DeckColors.Failure),
+                        modifier = Modifier.heightIn(min = 56.dp),
+                    ) { Text("Crash the app") }
+                }
+                if (settings.scenario == KEY_REUSE_SCENARIO) {
+                    OutlinedButton(
+                        onClick = viewModel::debugReuseKeyWithDifferentAmount,
+                        modifier = Modifier.heightIn(min = 56.dp),
+                    ) { Text("Reuse key") }
+                }
+            }
+            TextButton(onClick = onOpenPayments) {
+                Text(if (waiting > 0) "$waiting not finished yet. See all payments" else "See all payments")
             }
         }
 
@@ -151,9 +161,6 @@ fun PayTab(
         if (chargedTwice) {
             Banner(CHARGED_TWICE, DeckColors.Failure)
         }
-        TextButton(onClick = onOpenPayments) {
-            Text(if (waiting > 0) "$waiting not finished yet. See all payments" else "See all payments")
-        }
     }
 }
 
@@ -168,7 +175,7 @@ private fun NetworkStrip(mode: NetworkMode, onGoOnline: () -> Unit) {
         shape = RoundedCornerShape(8.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(mode.inPlainWords, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (online) {
                 // Same height as the strip with its button, so the screen does not jump.

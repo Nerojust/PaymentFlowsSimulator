@@ -40,14 +40,15 @@ val scenarios = listOf(
     ),
     Scenario(
         4, "App crash",
-        "Tap Pay, then Crash the app within 4 seconds. Open the app again. Charged once.",
+        "Tap Pay, then Crash the app while it still says Asking the bank (about 4 seconds). " +
+            "Open the app again. Charged once.",
         "The payment was saved before the crash, so the app picks it up again.",
         DemoSettings(scenario = 4, mode = NetworkMode.SLOW),
     ),
     Scenario(
         5, "Forgotten payment",
-        "Tap Pay, wait 2 minutes, tap Crash the app, open the app again, tap Go online. " +
-            "The app asks before it sends. Nothing is charged until you tap Send it.",
+        "Tap Pay, wait 2 minutes, tap Crash the app, open the app again. " +
+            "The app asks before it sends. Tap Send it, then Go online. Charged once.",
         "Money should never leave by surprise, so the app asks you first.",
         DemoSettings(scenario = 5, mode = NetworkMode.OFFLINE),
     ),
@@ -60,7 +61,7 @@ val scenarios = listOf(
     ),
     Scenario(
         7, "Sneaky amount change",
-        "Tap Pay and wait for Paid. Then tap Reuse key with a different amount. The bank refuses. Still 1 charge.",
+        "Tap Pay and wait for Paid. Then tap Reuse key: it sends the same key with a bigger amount. The bank refuses. Still 1 charge.",
         "A key belongs to one payment. Nobody can reuse it to change the amount.",
         DemoSettings(scenario = 7),
     ),

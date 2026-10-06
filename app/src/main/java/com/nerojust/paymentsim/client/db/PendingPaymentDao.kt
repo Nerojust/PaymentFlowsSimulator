@@ -39,6 +39,9 @@ interface PendingPaymentDao {
     @Query("UPDATE pending_payments SET lastError = :lastError WHERE id = :id")
     suspend fun setLastError(id: String, lastError: String?)
 
+    @Query("UPDATE pending_payments SET timestamp = :timestamp WHERE id = :id")
+    suspend fun setTimestamp(id: String, timestamp: Long)
+
     @Query("UPDATE pending_payments SET retryCount = retryCount + 1 WHERE id = :id")
     suspend fun incrementRetryCount(id: String)
 

@@ -92,7 +92,7 @@ private fun phoneStatus(status: String): Pair<String, Color> = when (status) {
     else -> status to DeckColors.Neutral
 }
 
-const val CHARGED_TWICE = "Problem: you were charged more than once for one payment"
+const val CHARGED_TWICE = "Problem: you were charged more than once"
 
 /** Server reasons in plain words. Anything else is already written for people. */
 fun plainReason(reason: String): String = when {

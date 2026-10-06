@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -45,6 +46,9 @@ class AppDependencies(
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val log = EventLog()
+
+    /** What the app found when it came back from "Crash the app". The screen shows it once. */
+    val restartNote = MutableStateFlow<String?>(null)
     val network = FakeNetwork(prefs, log)
 
     private val json = Json {

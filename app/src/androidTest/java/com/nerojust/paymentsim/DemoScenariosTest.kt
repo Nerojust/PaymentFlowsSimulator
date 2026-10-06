@@ -28,6 +28,17 @@ class DemoScenariosTest {
     fun tearDown() = harness.close()
 
     @Test
+    fun pickedDemo_survivesACrash() {
+        harness.configure { it.copy(scenario = 4, mode = NetworkMode.SLOW) }
+
+        val relaunched = harness.relaunch()
+
+        // The hint and the "Crash the app" button on the Pay tab hang off this.
+        assertEquals(4, relaunched.network.settings.value.scenario)
+        assertEquals(NetworkMode.SLOW, relaunched.network.settings.value.mode)
+    }
+
+    @Test
     fun scenario1_naiveClientWithoutIdempotency_chargesTwice() = runTest {
         harness.configure {
             it.copy(mode = NetworkMode.DROP_AFTER_PROCESSING, dropOnce = true, serverIdempotencyEnabled = false)
@@ -124,6 +135,27 @@ class DemoScenariosTest {
         harness.api.createPayment(id, REQUEST) // the request that was in flight when the app died
 
         val relaunched = harness.relaunch()
+        relaunched.safeClient.reconcilePendingPayments()
+
+        assertEquals(PendingPaymentStatus.CONFIRMED, harness.payment(id).status)
+        assertEquals(1, harness.ledger().size)
+    }
+
+    @Test
+    fun scenario5_sendItWhileStillOffline_isNotAskedAgainOnceOnline() = runTest {
+        harness.configure { it.copy(mode = NetworkMode.OFFLINE) }
+        val id = harness.safeClient.initiatePayment(AMOUNT, RECIPIENT)
+
+        harness.now += SafePaymentClient.DEFAULT_TTL_MS + 60_000
+        val relaunched = harness.relaunch()
+        relaunched.safeClient.reconcilePendingPayments() // app start: the dialog shows before Go online can be tapped
+        assertEquals(PendingPaymentStatus.AWAITING_USER_CONFIRMATION, harness.payment(id).status)
+
+        relaunched.safeClient.reconcilePayment(id, userConfirmed = true) // "Send it", still offline
+        assertEquals(PendingPaymentStatus.NEEDS_RECONCILE, harness.payment(id).status)
+        assertEquals(0, harness.ledger().size)
+
+        harness.configure { it.copy(mode = NetworkMode.ONLINE) } // "Go online"
         relaunched.safeClient.reconcilePendingPayments()
 
         assertEquals(PendingPaymentStatus.CONFIRMED, harness.payment(id).status)
