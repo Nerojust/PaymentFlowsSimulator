@@ -141,12 +141,12 @@ class SafePaymentClient(
         }
         try {
             enterConfirming()
-            log.log(LogSource.CLIENT, "Asking the server: what happened to payment $key?")
+            log.log(LogSource.CLIENT, "Asking the bank: what happened to payment $key?")
             val response = api.getPayment(payment.id)
             when {
                 settleFrom(payment, response.body()) -> Unit
                 response.code() == 404 -> {
-                    log.log(LogSource.CLIENT, "The server never got payment $key. Sending it again with the SAME key")
+                    log.log(LogSource.CLIENT, "The bank never got payment $key. Sending it again with the SAME key")
                     if (!send(payment)) scheduleStatusCheck(payment)
                 }
                 // processing (or a 5xx): the server may still be charging. Do not resend.
@@ -164,7 +164,7 @@ class SafePaymentClient(
      */
     private suspend fun send(payment: PendingPayment): Boolean {
         enterConfirming()
-        log.log(LogSource.CLIENT, "Sending payment ${payment.id.shortKey()} to the server")
+        log.log(LogSource.CLIENT, "Sending payment ${payment.id.shortKey()} to the bank")
         val response = api.createPayment(
             payment.id,
             PaymentRequest(payment.amountMinor, CURRENCY, payment.recipient),
@@ -174,7 +174,7 @@ class SafePaymentClient(
             code == 201 -> settleFrom(payment, response.body())
             code == 409 || code >= 500 -> {
                 dao.setLastError(payment.id, "HTTP $code")
-                val why = if (code == 409) "The server is still busy with" else "The server had an error ($code) on"
+                val why = if (code == 409) "The bank is still busy with" else "The bank had a problem with"
                 log.log(LogSource.CLIENT, "$why payment ${payment.id.shortKey()}. Will try again")
                 false
             }
@@ -267,7 +267,7 @@ class SafePaymentClient(
     suspend fun debugReuseKeyWithDifferentAmount() {
         val last = dao.latest()
         if (last == null) {
-            log.log(LogSource.CLIENT, "Make a payment with the Safe app first, then try this")
+            log.log(LogSource.CLIENT, "Make a payment with the Careful app first, then try this")
             return
         }
         try {
@@ -276,7 +276,7 @@ class SafePaymentClient(
             log.log(
                 LogSource.CLIENT,
                 "Sent key ${last.id.shortKey()} again with a different amount (${formatMinor(request.amountMinor)}). " +
-                    "The server said: ${response.code()}",
+                    if (response.isSuccessful) "The bank took it as a new payment" else "The bank refused it",
             )
         } catch (e: IOException) {
             log.log(LogSource.CLIENT, "Could not send: ${e.message}")

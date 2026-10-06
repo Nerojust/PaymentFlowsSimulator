@@ -44,13 +44,13 @@ fun PaymentsTab(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         when {
-            duplicates.isNotEmpty() -> Banner("Problem: the customer was charged more than once", DeckColors.Failure)
+            duplicates.isNotEmpty() -> Banner(CHARGED_TWICE, DeckColors.Failure)
             ledger.isEmpty() -> Banner("No charges yet", DeckColors.Neutral)
-            else -> Banner("Good: ${ledger.size} charge${if (ledger.size == 1) "" else "s"}, nobody charged twice", DeckColors.Fix)
+            else -> Banner("Good: ${ledger.size} charge${if (ledger.size == 1) "" else "s"}, nothing charged twice", DeckColors.Fix)
         }
 
-        Text("Saved on this phone (${queue.size})", style = MaterialTheme.typography.titleMedium)
-        if (queue.isEmpty()) Text("Nothing saved. The Naive app never saves a payment.", color = DeckColors.LogComment)
+        Text("What your phone thinks (${queue.size})", style = MaterialTheme.typography.titleMedium)
+        if (queue.isEmpty()) Text("Nothing saved. The Careless app never saves a payment.", color = DeckColors.LogComment)
         queue.forEach { payment ->
             val (label, color) = phoneStatus(payment.status)
             PaymentRow(
@@ -66,7 +66,7 @@ fun PaymentsTab(
         }
 
         Text(
-            "Charged by the server (${ledger.size})",
+            "What the bank really took (${ledger.size})",
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(top = 8.dp),
         )
@@ -92,9 +92,12 @@ private fun phoneStatus(status: String): Pair<String, Color> = when (status) {
     else -> status to DeckColors.Neutral
 }
 
+const val CHARGED_TWICE = "Problem: you were charged more than once for one payment"
+
 /** Server reasons in plain words. Anything else is already written for people. */
-fun plainReason(reason: String): String = when (reason) {
-    "insufficient_funds" -> "not enough money"
+fun plainReason(reason: String): String = when {
+    reason == "insufficient_funds" -> "not enough money"
+    reason.startsWith("HTTP") -> "the bank had a problem"
     else -> reason
 }
 

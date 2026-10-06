@@ -63,11 +63,11 @@ class FakePaymentServer(
             val key = idempotencyKey.shortKey()
             return when {
                 existing.requestHash != requestHash -> {
-                    log.log(LogSource.SERVER, "Key $key was already used for a different payment. Refused, no charge (422)")
+                    log.log(LogSource.SERVER, "Key $key was already used for a different payment. Refused, no charge")
                     Reply(422, encode(PaymentResponse(error = "key_reused_with_different_request")))
                 }
                 existing.status == STATUS_PROCESSING || existing.resultJson == null -> {
-                    log.log(LogSource.SERVER, "Still busy with payment $key. Try later (409)")
+                    log.log(LogSource.SERVER, "Still busy with payment $key. Try later")
                     Reply(409, encode(PaymentResponse(status = STATUS_PROCESSING)))
                 }
                 else -> {

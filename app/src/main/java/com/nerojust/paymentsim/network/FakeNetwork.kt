@@ -49,11 +49,11 @@ class FakeNetwork(private val prefs: SharedPreferences, private val log: EventLo
         val current = settings.value
         when (current.mode) {
             NetworkMode.OFFLINE -> {
-                log.log(LogSource.NET, "No internet. The request for $what never reached the server")
+                log.log(LogSource.NET, "No internet. The request for $what never reached the bank")
                 throw IOException("No internet")
             }
             NetworkMode.SERVER_ERROR -> {
-                log.log(LogSource.NET, "The server had an error (500) on $what. Nothing was charged")
+                log.log(LogSource.NET, "The bank had a problem with $what. Nothing was charged")
                 return false
             }
             NetworkMode.SLOW -> {
@@ -69,12 +69,12 @@ class FakeNetwork(private val prefs: SharedPreferences, private val log: EventLo
     fun afterServer(what: String, code: Int) {
         val current = settings.value
         if (current.mode != NetworkMode.DROP_AFTER_PROCESSING) {
-            log.log(LogSource.NET, "The answer for $what arrived ($code)")
+            log.log(LogSource.NET, "The answer for $what arrived")
             return
         }
         if (current.dropOnce) update { it.copy(mode = NetworkMode.ONLINE) }
-        log.log(LogSource.NET, "The server finished $what, but its answer got lost on the way back")
-        throw IOException("The server's answer got lost")
+        log.log(LogSource.NET, "The bank finished $what, but its answer got lost on the way back")
+        throw IOException("The bank's answer got lost")
     }
 
     private fun load() = DemoSettings().let { defaults ->

@@ -167,7 +167,7 @@ class DemoScenariosTest {
         harness.safeClient.debugReuseKeyWithDifferentAmount() // the on-screen debug button
 
         assertEquals(422, response.code())
-        assertTrue(harness.logMessages().any { it.contains("The server said: 422") })
+        assertTrue(harness.logMessages().any { it.contains("The bank refused it") })
         assertEquals(1, harness.ledger().size) // only the original payment
     }
 }

@@ -61,13 +61,13 @@ class DemoViewModel(private val deps: AppDependencies) : ViewModel() {
                 val id = deps.safeClient.initiatePayment(amountMinor, recipient.trim())
                 deps.clientDb.pendingPaymentDao().find(id)?.let { howItEnded(it) }?.let(_messages::tryEmit)
             } else {
-                _messages.tryEmit("Sending it to the server. The Naive app does not save it on this phone.")
+                _messages.tryEmit("Sending it to the bank. The Careless app does not save it on this phone.")
                 deps.naiveClient.pay(amountMinor, recipient.trim())
                 _messages.tryEmit(
                     if (deps.naiveClient.lastError.value == null) {
-                        "The Naive app says: paid."
+                        "The Careless app says: paid."
                     } else {
-                        "The Naive app got no answer, so it thinks the payment failed. It cannot check."
+                        "The Careless app got no answer, so it thinks the payment failed. It cannot check."
                     },
                 )
             }
@@ -78,7 +78,7 @@ class DemoViewModel(private val deps: AppDependencies) : ViewModel() {
         alreadyWaiting > 0 -> "$alreadyWaiting other payment${if (alreadyWaiting == 1) " is" else "s are"} ahead of it. It will be sent after."
         mode == NetworkMode.OFFLINE -> "No internet, so it will keep trying and send it when you are back online."
         mode == NetworkMode.SLOW -> "Internet is slow, so the answer will take a few seconds."
-        else -> "Sending it to the server now."
+        else -> "Sending it to the bank now."
     }
 
     private fun howItEnded(payment: PendingPayment): String? = when (payment.status) {
@@ -95,7 +95,7 @@ class DemoViewModel(private val deps: AppDependencies) : ViewModel() {
         if (mode != NetworkMode.OFFLINE) {
             deps.scope.launch {
                 val unfinished = deps.safeClient.unsettledCount()
-                if (unfinished > 0) _messages.tryEmit("Checking $unfinished unfinished payment${if (unfinished == 1) "" else "s"} with the server.")
+                if (unfinished > 0) _messages.tryEmit("Checking $unfinished unfinished payment${if (unfinished == 1) "" else "s"} with the bank.")
                 deps.safeClient.reconcilePendingPayments()
             }
         }

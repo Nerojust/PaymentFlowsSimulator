@@ -78,9 +78,11 @@ fun PayTab(
                     }
                 }
                 Text(scenario?.hint ?: "Pick a demo above, or just tap Pay.", fontWeight = FontWeight.Medium)
+                scenario?.let { Text("Why it matters: ${it.why}") }
                 Text(
-                    text = (if (settings.useSafeClient) "Safe app" else "Naive app") + " · " +
-                        if (settings.serverIdempotencyEnabled) "the server remembers keys" else "the server forgets keys",
+                    text = (if (settings.useSafeClient) "Careful app" else "Careless app") + " · " +
+                        (if (settings.serverIdempotencyEnabled) "the bank remembers keys" else "the bank forgets keys") +
+                        "\nA key is a name tag the phone puts on each payment, so the bank can spot a repeat.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -120,7 +122,7 @@ fun PayTab(
             OutlinedButton(
                 onClick = viewModel::killApp,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = DeckColors.Failure),
-            ) { Text("Kill app") }
+            ) { Text("Crash the app") }
         }
         if (settings.scenario == KEY_REUSE_SCENARIO) {
             OutlinedButton(onClick = viewModel::debugReuseKeyWithDifferentAmount) {
@@ -130,24 +132,24 @@ fun PayTab(
 
         if (settings.useSafeClient) {
             StateBadge(
-                title = if (paymentState is PaymentState.Failed) "FAILED" else paymentState.label,
-                detail = paymentState.inPlainWords(),
+                title = paymentState.inPlainWords(),
+                detail = if (paymentState is PaymentState.Failed) "FAILED" else paymentState.label,
                 color = stateColor(paymentState),
             )
         } else {
             StateBadge(
-                title = "NAIVE APP",
-                detail = when {
+                title = when {
                     naiveLoading -> "Loading…"
-                    naiveError != null -> naiveError
+                    naiveError != null -> plainReason(naiveError)
                     else -> "Ready"
                 },
+                detail = "CARELESS APP",
                 color = if (naiveError != null && !naiveLoading) DeckColors.Failure else DeckColors.Neutral,
             )
         }
 
         if (chargedTwice) {
-            Banner("Problem: the customer was charged more than once", DeckColors.Failure)
+            Banner(CHARGED_TWICE, DeckColors.Failure)
         }
         TextButton(onClick = onOpenPayments) {
             Text(if (waiting > 0) "$waiting not finished yet. See all payments" else "See all payments")
@@ -184,15 +186,15 @@ private val NetworkMode.inPlainWords: String
     get() = when (this) {
         NetworkMode.ONLINE -> "Internet is working"
         NetworkMode.OFFLINE -> "No internet"
-        NetworkMode.DROP_AFTER_PROCESSING -> "The server's answer will get lost"
+        NetworkMode.DROP_AFTER_PROCESSING -> "The bank's answer will get lost"
         NetworkMode.SLOW -> "Internet is slow"
-        NetworkMode.SERVER_ERROR -> "The server is broken"
+        NetworkMode.SERVER_ERROR -> "The bank is broken"
     }
 
 private fun PaymentState.inPlainWords(): String = when (this) {
     PaymentState.Idle -> "Ready for a payment"
     PaymentState.Pending -> "Saved on this phone"
-    PaymentState.Confirming -> "Asking the server"
+    PaymentState.Confirming -> "Asking the bank…"
     PaymentState.Retrying -> "No answer yet. Trying again"
     PaymentState.Success -> "Paid"
     is PaymentState.Failed -> "Not paid: ${plainReason(error)}"

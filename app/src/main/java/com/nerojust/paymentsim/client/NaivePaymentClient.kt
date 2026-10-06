@@ -28,19 +28,19 @@ class NaivePaymentClient(private val api: PaymentApi, private val log: EventLog)
         try {
             // BUG: a new key on every tap and nothing persisted, so a retry is a brand new payment.
             val key = UUID.randomUUID().toString()
-            log.log(LogSource.CLIENT, "Naive app: sending the payment with a brand new key ${key.shortKey()}")
+            log.log(LogSource.CLIENT, "Careless app: sending the payment with a brand new key ${key.shortKey()}")
             val response = api.createPayment(key, PaymentRequest(amountMinor, SafePaymentClient.CURRENCY, recipient))
             val status = response.body()?.status
             if (status == "succeeded") {
-                log.log(LogSource.CLIENT, "Naive app: the payment worked")
+                log.log(LogSource.CLIENT, "Careless app: the payment worked")
             } else {
                 _lastError.value = response.body()?.reason ?: "HTTP ${response.code()}"
-                log.log(LogSource.CLIENT, "Naive app: the payment failed: ${_lastError.value}")
+                log.log(LogSource.CLIENT, "Careless app: the bank said no")
             }
         } catch (e: Exception) {
             // BUG: broad catch. "No response" is treated as "it failed", and the user is invited to tap again.
             _lastError.value = "${e.message}. Tap Pay to try again"
-            log.log(LogSource.CLIENT, "Naive app: ${e.message}. It thinks the payment failed, so you can tap Pay again")
+            log.log(LogSource.CLIENT, "Careless app: ${e.message}. It thinks the payment failed, so you can tap Pay again")
         }
         _isLoading.value = false
     }

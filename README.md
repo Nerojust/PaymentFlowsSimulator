@@ -7,7 +7,7 @@ fake network between them that can fail at the exact moments the talk describes.
 charge with the Naive client, then show each pattern fixing it with the Safe client.
 
 The app has three tabs: **Pay** (pick a demo, tap Pay, watch the state), **Payments** (every payment saved
-on the phone and every charge the server made) and **Log** (what happened, step by step, in plain English).
+on the phone and every charge the bank made) and **What happened** (every step, step by step, in plain English).
 
 No request leaves the device: the fake server answers from an OkHttp interceptor, and the app does not
 even declare the `INTERNET` permission.
@@ -44,20 +44,20 @@ state and has the **Go online** button. The badge under Pay shows the state mach
 
 | # | Slide | Chip | What the chip sets | Steps | What the audience sees |
 |---|---|---|---|---|---|
-| 1 | 2, 12 | Double charge | Naive, server forgets keys, lose one answer | Tap Pay. The badge shows the error. Tap Pay again. | Red line "Problem: the customer was charged more than once". Payments tab: nothing saved on the phone, 2 charges on the server marked "Charged twice". |
-| 2 | 13, 14 | Safe retry | Safe, server remembers keys, lose one answer | Tap Pay once. | Badge goes Pending, Confirming, Retrying, Success. Log: "Already saw payment ... Sending back the saved answer. No new charge". Payments tab: 1 charge. |
-| 3 | 8, 9, 11 | No internet | Safe, no internet | Tap Pay. Open Log to watch the 1s/2s/4s/8s/16s waits. Go back to Pay and tap **Go online**. | The payment settles on the switch, 1 charge. (Tap Go online earlier and one of the tries succeeds instead.) |
-| 4 | 16, 17 | App crash | Safe, slow internet | Tap Pay, tap **Kill app** within 4 seconds, open the app again. | First log line: "App restarted. Checking 1 unfinished payment(s)". The app asks the server, sends again with the same key, ends in Success with 1 charge. |
-| 5 | 17 | Old payment | Safe, no internet | Tap Pay, wait at least 2 minutes (the demo TTL), tap **Kill app**, open the app again, tap **Go online**. | Dialog "Old payment found". Nothing is charged until you tap **Send it**. |
-| 6 | 10 | Not enough money | Safe, internet working, amount 60000 | Tap Pay. | Badge: FAILED, "Not paid: not enough money". No tries in the log, 0 charges. |
-| 7 | 14 | Same key, new amount | Safe, server remembers keys | Tap Pay, wait for Success, then tap **Reuse key with a different amount**. | Log: the server refuses with 422. Still 1 charge. |
-| 8 | 8, 9 | Many payments | Safe, no internet | Tap Pay, change the amount, tap Pay again, a few times. Open **Payments**. Then tap **Go online** on the Pay tab. | Payments tab shows each one "Saved on phone", the tab badge counts them, and after Go online each is "Paid" with exactly one charge. |
+| 1 | 2, 12 | Double charge | Careless, bank forgets keys, lose one answer | Tap Pay. The badge shows the error. Tap Pay again. | Red line "Problem: you were charged more than once for one payment". Payments tab: nothing saved on the phone, 2 charges at the bank marked "Charged twice". |
+| 2 | 13, 14 | Safe retry | Careful, bank remembers keys, lose one answer | Tap Pay once. | Badge goes "Saved on this phone", "Asking the bank…", "No answer yet. Trying again", "Paid" (state names in small print). What happened: "Already saw payment ... Sending back the saved answer. No new charge". Payments tab: 1 charge. |
+| 3 | 8, 9, 11 | No internet | Careful, no internet | Tap Pay. Open What happened to watch the 1s/2s/4s/8s/16s waits. Go back to Pay and tap **Go online**. | The payment settles on the switch, 1 charge. (Tap Go online earlier and one of the tries succeeds instead.) |
+| 4 | 16, 17 | App crash | Careful, slow internet | Tap Pay, tap **Crash the app** within 4 seconds, open the app again. | First log line: "App restarted. Checking 1 unfinished payment(s)". The app asks the bank, sends again with the same key, ends in Paid with 1 charge. |
+| 5 | 17 | Forgotten payment | Careful, no internet | Tap Pay, wait at least 2 minutes (the demo TTL), tap **Crash the app**, open the app again, tap **Go online**. | Dialog "Forgotten payment found". Nothing is charged until you tap **Send it**. |
+| 6 | 10 | Not enough money | Careful, internet working, amount 60000 | Tap Pay. | Badge: "Not paid: not enough money", FAILED in small print. No tries in the log, 0 charges. |
+| 7 | 14 | Sneaky amount change | Careful, bank remembers keys | Tap Pay, wait for Paid, then tap **Reuse key with a different amount**. | What happened: "The bank refused it". Still 1 charge. |
+| 8 | 8, 9 | Many payments | Careful, no internet | Tap Pay, change the amount, tap Pay again, a few times. Open **Payments**. Then tap **Go online** on the Pay tab. | Payments tab shows each one "Saved on phone", the tab badge counts them, and after Go online each is "Paid" with exactly one charge. |
 
 The state machine check (slide 6, Success -> Failed is rejected) is a unit test: run `./gradlew test`
 (`PaymentStateTransitionTest`).
 
-**Menu** (top right) has Kill app, Clear everything and Settings. Settings holds the raw toggles (Naive/Safe,
-server idempotency, the five network modes, lose only one answer) for going off script. Changing one by hand
+**Menu** (top right) has Crash the app, Clear everything and Settings. Settings holds the raw toggles (Careless/Careful,
+bank idempotency, the five network modes, lose only one answer) for going off script. Changing one by hand
 clears the demo hint.
 
 Two extra variations worth showing if there is time, both covered by tests:
@@ -87,11 +87,13 @@ The patterns only work together.
 - **The Payments tab observes the server's Room Flow directly.** That list is the audience looking inside
   the server. The payment clients (`SafePaymentClient`, `NaivePaymentClient`) only reach the server through
   Retrofit. `GET /ledger` exists and the tests use it.
-- **Three tabs instead of the build spec's one screen** (Pay, Payments, Log), with demo chips instead of the
+- **Three tabs instead of the build spec's one screen** (Pay, Payments, What happened), with demo chips instead of the
   control list. The spec's toggles are all still there under Menu > Settings.
-- **All on-screen text and log lines are in plain English** ("No internet", "Asking the server", "PHONE" /
-  "INTERNET" / "SERVER" / "BACKGROUND" in the log) so a non-technical audience can follow. State names
-  (PENDING, CONFIRMING, ...) are kept because they are on slide 6.
+- **All on-screen text and log lines are in plain English** ("No internet", "Asking the bank", "PHONE" /
+  "INTERNET" / "BANK" / "BACKGROUND" in the log) so even a teenager can follow. The server is called "the bank"
+  and the Naive/Safe clients "Careless app"/"Careful app" on screen only; the code keeps the slide names. State
+  names (PENDING, CONFIRMING, ...) are kept in small print under the plain words because they are on slide 6.
+  HTTP codes are not shown. Each demo has a "Why it matters" line, and the Pay tab says what a key is.
 - **Pay is never disabled in the Safe client.** Every tap is saved and payments are sent one at a time, in
   order, so several can stack up. The double-tap protection is the key reuse for the same amount and recipient.
 - **Some classes are named differently from the build spec**, to be easier to read: `SafePaymentClient`
@@ -102,7 +104,7 @@ The patterns only work together.
   (`ProcessedPaymentEntity`), `Charge` (`LedgerEntryEntity`), `BackgroundRetryWorker` (`RetryPaymentWorker`).
   Table names (`pending_payments`, `processed_payments`, `ledger`) and `PaymentState` are unchanged.
 - **A snackbar says where each payment is going** when Pay is tapped ("Saved on this phone. Sending it to the
-  server now.") and how it ended ("Paid: ...", "Not paid: ...", "Still no answer ...").
+  bank now.") and how it ended ("Paid: ...", "Not paid: ...", "Still no answer ...").
 - **Changing the network mode triggers reconciliation.** This stands in for a connectivity callback and keeps
   scenario 3 fast. Without it, the WorkManager backoff (10s minimum, doubling) decides when the payment settles.
 - **Retries are one initial attempt plus five retries**, with the loop kept in the slide's shape (try, catch,

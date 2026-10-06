@@ -56,7 +56,7 @@ import com.nerojust.paymentsim.network.DemoSettings
 private enum class Tab(val title: String, val glyph: String) {
     PAY("Pay", "₦"),
     PAYMENTS("Payments", "≡"),
-    LOG("Log", ">_"),
+    LOG("What happened", "…"),
 }
 
 /** The shell: three tabs, a Menu for the presenter's tools, and the "old payment" question. */
@@ -73,7 +73,7 @@ fun DemoScreen(viewModel: DemoViewModel = viewModel { DemoViewModel(AppDependenc
 
     var tab by rememberSaveable { mutableStateOf(Tab.PAY) }
     var amountText by rememberSaveable { mutableStateOf("1250.00") }
-    var recipient by rememberSaveable { mutableStateOf("Ada Lovelace") }
+    var recipient by rememberSaveable { mutableStateOf("Pizza place") }
     var menuOpen by remember { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -94,7 +94,7 @@ fun DemoScreen(viewModel: DemoViewModel = viewModel { DemoViewModel(AppDependenc
                     TextButton(onClick = { menuOpen = true }) { Text("Menu") }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
-                            text = { Text("Kill app (fake a crash)") },
+                            text = { Text("Crash the app (pretend)") },
                             onClick = viewModel::killApp,
                         )
                         DropdownMenuItem(
@@ -195,16 +195,16 @@ private fun SettingsDialog(settings: DemoSettings, viewModel: DemoViewModel, onC
                         selected = !settings.useSafeClient,
                         onClick = { viewModel.setUseSafeClient(false) },
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                    ) { Text("Naive") }
+                    ) { Text("Careless") }
                     SegmentedButton(
                         selected = settings.useSafeClient,
                         onClick = { viewModel.setUseSafeClient(true) },
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                    ) { Text("Safe") }
+                    ) { Text("Careful") }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("The server remembers keys (idempotency)", Modifier.weight(1f))
+                    Text("The bank remembers keys (idempotency)", Modifier.weight(1f))
                     Switch(
                         checked = settings.serverIdempotencyEnabled,
                         onCheckedChange = viewModel::setServerIdempotency,
@@ -241,7 +241,7 @@ private val NetworkMode.shortLabel: String
         NetworkMode.OFFLINE -> "No internet"
         NetworkMode.DROP_AFTER_PROCESSING -> "Lose the answer"
         NetworkMode.SLOW -> "Slow"
-        NetworkMode.SERVER_ERROR -> "Server broken"
+        NetworkMode.SERVER_ERROR -> "Bank broken"
     }
 
 @Composable
@@ -249,7 +249,7 @@ private fun StalePaymentDialog(payment: PendingPayment, onSend: () -> Unit, onCa
     val minutesAgo = (System.currentTimeMillis() - payment.timestamp) / 60_000
     AlertDialog(
         onDismissRequest = {}, // a decision is required: send or cancel
-        title = { Text("Old payment found") },
+        title = { Text("Forgotten payment found") },
         text = {
             Text(
                 "You started this payment $minutesAgo min ago and it never finished: " +

@@ -67,7 +67,7 @@ private val LogSource.inPlainWords: String
     get() = when (this) {
         LogSource.CLIENT -> "PHONE"
         LogSource.NET -> "INTERNET"
-        LogSource.SERVER -> "SERVER"
+        LogSource.SERVER -> "BANK"
         LogSource.WORKER -> "BACKGROUND"
     }
 

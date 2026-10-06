@@ -108,7 +108,7 @@ class ReconciliationTest {
 
         assertEquals(PendingPaymentStatus.AWAITING_USER_CONFIRMATION, harness.payment(id).status)
         assertEquals(PaymentState.Idle, safeClient.state.value)
-        assertTrue(harness.logMessages().none { it.startsWith("Sending payment") || it.startsWith("Asking the server") })
+        assertTrue(harness.logMessages().none { it.startsWith("Sending payment") || it.startsWith("Asking the bank") })
         assertEquals(0, harness.ledger().size)
     }
 
