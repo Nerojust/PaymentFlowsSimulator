@@ -117,7 +117,7 @@ class DemoScenariosTest {
         val id = harness.safeClient.initiatePayment(AMOUNT, RECIPIENT)
         harness.configure { it.copy(mode = NetworkMode.SLOW) }
 
-        val relaunched = harness.relaunch() // process died: state machine and log are gone, databases are not
+        val relaunched = harness.relaunch() // process died: the state machine is gone, the databases are not
         assertEquals(PaymentState.Idle, relaunched.safeClient.state.value)
         assertEquals(1, relaunched.safeClient.unsettledCount())
         relaunched.safeClient.reconcilePendingPayments()

@@ -137,8 +137,9 @@ class DemoViewModel(private val deps: AppDependencies) : ViewModel() {
         viewModelScope.launch { deps.resetAll() }
     }
 
-    /** Simulates a crash. Both databases and the network settings are on disk, the event log is not. */
+    /** Simulates a crash. Both databases, the network settings and the event log are on disk. */
     fun killApp() {
+        deps.log.log(LogSource.CLIENT, "———— The app crashed here ————")
         deps.network.update { it.copy(crashedOnPurpose = true) }
         Process.killProcess(Process.myPid())
     }

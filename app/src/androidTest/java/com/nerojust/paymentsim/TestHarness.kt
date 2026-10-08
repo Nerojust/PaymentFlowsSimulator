@@ -59,6 +59,7 @@ class TestHarness {
         enqueueRetryWorker = { enqueuedWorkers += it },
         cancelAllWork = {},
         clock = { now },
+        logFile = null, // in memory, so one test never reads another test's lines
     )
 
     companion object {

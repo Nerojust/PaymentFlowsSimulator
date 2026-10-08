@@ -26,6 +26,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.io.File
 
 /**
  * Manual wiring, no Hilt, so the whole object graph fits on one slide.
@@ -41,11 +42,12 @@ class AppDependencies(
     enqueueRetryWorker: (paymentId: String) -> Unit = { BackgroundRetryWorker.enqueue(context, it) },
     private val cancelAllWork: () -> Unit = { WorkManager.getInstance(context).cancelAllWork() },
     clock: () -> Long = System::currentTimeMillis,
+    logFile: File? = File(context.filesDir, "event_log.txt"),
 ) {
     /** Payments outlive the Activity, so they run here and not in viewModelScope. */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    val log = EventLog()
+    val log = EventLog(logFile)
 
     /** What the app found when it came back from "Crash the app". The screen shows it once. */
     val restartNote = MutableStateFlow<String?>(null)
