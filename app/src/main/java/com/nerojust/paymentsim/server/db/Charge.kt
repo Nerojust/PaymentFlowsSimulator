@@ -3,7 +3,7 @@ package com.nerojust.paymentsim.server.db
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-// Slide 14
+// Slide 15
 @Entity(tableName = "ledger")
 data class Charge(
     @PrimaryKey(autoGenerate = true) val chargeId: Long = 0,

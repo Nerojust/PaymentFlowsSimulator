@@ -11,7 +11,7 @@ class App : Application() {
         super.onCreate()
         val deps = AppDependencies(this).also { AppDependencies.instance = it }
 
-        // Slide 17: every start settles whatever the last run left behind.
+        // Slide 18: every start settles whatever the last run left behind.
         deps.scope.launch {
             val unsettled = deps.safeClient.unsettledCount()
             deps.log.log(LogSource.CLIENT, "App restarted. Checking $unsettled unfinished payment(s)")

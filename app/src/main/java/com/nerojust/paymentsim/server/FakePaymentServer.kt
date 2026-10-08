@@ -30,7 +30,7 @@ class FakePaymentServer(
 
     private val dao = db.serverDao()
 
-    // Slide 14
+    // Slide 15
     suspend fun createPayment(idempotencyKey: String?, request: PaymentRequest): Reply {
         val settings = network.settings.value
 

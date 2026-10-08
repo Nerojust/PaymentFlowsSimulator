@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.nerojust.paymentsim.model.PendingPaymentStatus
 
-// Slide 9
+// Slide 10
 @Entity(tableName = "pending_payments")
 data class PendingPayment(
     @PrimaryKey val id: String,      // also the idempotency key

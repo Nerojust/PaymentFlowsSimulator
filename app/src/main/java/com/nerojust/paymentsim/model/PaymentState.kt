@@ -2,7 +2,7 @@ package com.nerojust.paymentsim.model
 
 import com.nerojust.paymentsim.BuildConfig
 
-// Slide 6
+// Slide 7
 sealed class PaymentState {
     object Idle : PaymentState()
     object Pending : PaymentState()

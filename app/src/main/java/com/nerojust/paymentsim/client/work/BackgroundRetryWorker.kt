@@ -16,7 +16,7 @@ import com.nerojust.paymentsim.log.LogSource
 import com.nerojust.paymentsim.log.shortKey
 import java.util.concurrent.TimeUnit
 
-/** Slide 11: finishes a payment after the in-app retries gave up. It reconciles, it never blindly resends. */
+/** Slide 12: finishes a payment after the in-app retries gave up. It reconciles, it never blindly resends. */
 class BackgroundRetryWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {

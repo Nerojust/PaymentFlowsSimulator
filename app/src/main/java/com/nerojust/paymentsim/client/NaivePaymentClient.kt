@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
 /**
- * Slide 2: the client that double charges. Every bug in here is deliberate, do not fix them.
+ * Slide 3: the client that double charges. Every bug in here is deliberate, do not fix them.
  */
 class NaivePaymentClient(private val api: PaymentApi, private val log: EventLog) {
 

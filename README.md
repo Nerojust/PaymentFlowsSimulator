@@ -44,16 +44,16 @@ state and has the **Go online** button. The badge under Pay shows the state mach
 
 | # | Slide | Chip | What the chip sets | Steps | What the audience sees |
 |---|---|---|---|---|---|
-| 1 | 2, 12 | Double charge | Careless, bank forgets keys, lose one answer | Tap Pay. The badge shows the error. Tap Pay again. | Red line "Problem: you were charged more than once". Payments tab: nothing saved on the phone, 2 charges at the bank marked "Charged twice". |
-| 2 | 13, 14 | Safe retry | Careful, bank remembers keys, lose one answer | Tap Pay once. | Badge goes "Saved on this phone", "Asking the bank…", "No answer yet. Trying again", "Paid" (state names in small print). What happened: "Already saw payment ... Sending back the saved answer. No new charge". Payments tab: 1 charge. |
-| 3 | 8, 9, 11 | No internet | Careful, no internet | Tap Pay. Open What happened to watch the 1s/2s/4s/8s/16s waits. Go back to Pay and tap **Go online**. | The payment settles on the switch, 1 charge. (Tap Go online earlier and one of the tries succeeds instead.) |
-| 4 | 16, 17 | App crash | Careful, slow internet | Tap Pay, tap **Crash the app** while the status still says "Asking the bank…" (about 4 seconds), open the app again. | The log keeps the lines from before the crash, then "———— The app crashed here ————", then "App restarted. Checking 1 unfinished payment(s)", and a note says what the app found. The app asks the bank, sends again with the same key, ends in Paid with 1 charge. |
-| 5 | 17 | Forgotten payment | Careful, no internet | Tap Pay, wait at least 2 minutes (the demo TTL), tap **Crash the app**, open the app again. Tap **Send it**, then **Go online**. | Dialog "Forgotten payment found" as soon as the app opens. Nothing is charged until you tap **Send it**, and it asks only once. 1 charge. |
-| 6 | 10 | Not enough money | Careful, internet working, amount 60000 | Tap Pay. | Badge: "Not paid: not enough money", FAILED in small print. No tries in the log, 0 charges. |
-| 7 | 14 | Sneaky amount change | Careful, bank remembers keys | Tap Pay, wait for Paid, then tap **Reuse key** (it sends the same key with a bigger amount). | What happened: "The bank refused it". Still 1 charge. |
-| 8 | 8, 9 | Many payments | Careful, no internet | Tap Pay, change the amount, tap Pay again, a few times. Open **Payments**. Then tap **Go online** on the Pay tab. | Payments tab shows each one "Saved on phone", the tab badge counts them, and after Go online each is "Paid" with exactly one charge. |
+| 1 | 3, 13 | Double charge | Careless, bank forgets keys, lose one answer | Tap Pay. The badge shows the error. Tap Pay again. | Red line "Problem: you were charged more than once". Payments tab: nothing saved on the phone, 2 charges at the bank marked "Charged twice". |
+| 2 | 14, 15 | Safe retry | Careful, bank remembers keys, lose one answer | Tap Pay once. | Badge goes "Saved on this phone", "Asking the bank…", "No answer yet. Trying again", "Paid" (state names in small print). What happened: "Already saw payment ... Sending back the saved answer. No new charge". Payments tab: 1 charge. |
+| 3 | 9, 10, 12 | No internet | Careful, no internet | Tap Pay. Open What happened to watch the 1s/2s/4s/8s/16s waits. Go back to Pay and tap **Go online**. | The payment settles on the switch, 1 charge. (Tap Go online earlier and one of the tries succeeds instead.) |
+| 4 | 17, 18 | App crash | Careful, slow internet | Tap Pay, tap **Crash the app** while the status still says "Asking the bank…" (about 4 seconds), open the app again. | The log keeps the lines from before the crash, then "———— The app crashed here ————", then "App restarted. Checking 1 unfinished payment(s)", and a note says what the app found. The app asks the bank, sends again with the same key, ends in Paid with 1 charge. |
+| 5 | 18 | Forgotten payment | Careful, no internet | Tap Pay, wait at least 2 minutes (the demo TTL), tap **Crash the app**, open the app again. Tap **Send it**, then **Go online**. | Dialog "Forgotten payment found" as soon as the app opens. Nothing is charged until you tap **Send it**, and it asks only once. 1 charge. |
+| 6 | 11 | Not enough money | Careful, internet working, amount 60000 | Tap Pay. | Badge: "Not paid: not enough money", FAILED in small print. No tries in the log, 0 charges. |
+| 7 | 15 | Sneaky amount change | Careful, bank remembers keys | Tap Pay, wait for Paid, then tap **Reuse key** (it sends the same key with a bigger amount). | What happened: "The bank refused it". Still 1 charge. |
+| 8 | 9, 10 | Many payments | Careful, no internet | Tap Pay, change the amount, tap Pay again, a few times. Open **Payments**. Then tap **Go online** on the Pay tab. | Payments tab shows each one "Saved on phone", the tab badge counts them, and after Go online each is "Paid" with exactly one charge. |
 
-The state machine check (slide 6, Success -> Failed is rejected) is a unit test: run `./gradlew test`
+The state machine check (slide 7, Success -> Failed is rejected) is a unit test: run `./gradlew test`
 (`PaymentStateTransitionTest`).
 
 **Menu** (top right) has Crash the app, Clear everything and Settings. Settings holds the raw toggles (Careless/Careful,
@@ -92,14 +92,14 @@ The patterns only work together.
 - **All on-screen text and log lines are in plain English** ("No internet", "Asking the bank", "PHONE" /
   "INTERNET" / "BANK" / "BACKGROUND" in the log) so even a teenager can follow. The server is called "the bank"
   and the Naive/Safe clients "Careless app"/"Careful app" on screen only; the code keeps the slide names. State
-  names (PENDING, CONFIRMING, ...) are kept in small print under the plain words because they are on slide 6.
+  names (PENDING, CONFIRMING, ...) are kept in small print under the plain words because they are on slide 7.
   HTTP codes are not shown. Each demo has a "Why it matters" line, and the Pay tab says what a key is.
 - **Pay is never disabled in the Safe client.** Every tap is saved and payments are sent one at a time, in
   order, so several can stack up. The double-tap protection is the key reuse for the same amount and recipient.
 - **Some classes are named differently from the build spec**, to be easier to read: `SafePaymentClient`
   (spec: `PaymentRepository`), `AppDependencies` (`ServiceLocator`), `FakeNetwork` and `DemoSettings`
   (`NetworkSimulator`), `FakeServerInterceptor` (`FakeBackendInterceptor`), `DemoScreen` and `DemoViewModel`,
-  `PendingPayment` (`PendingPaymentEntity`, now the same name as on slides 9, 10 and 13), `PendingPaymentStatus`
+  `PendingPayment` (`PendingPaymentEntity`, now the same name as on slides 10, 11 and 14), `PendingPaymentStatus`
   (`PaymentStatus`), `RememberedPayment`
   (`ProcessedPaymentEntity`), `Charge` (`LedgerEntryEntity`), `BackgroundRetryWorker` (`RetryPaymentWorker`).
   Table names (`pending_payments`, `processed_payments`, `ledger`) and `PaymentState` are unchanged.

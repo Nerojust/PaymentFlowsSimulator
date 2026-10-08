@@ -42,7 +42,7 @@ class SafePaymentClient(
     private val _state = MutableStateFlow<PaymentState>(PaymentState.Idle)
     val state: StateFlow<PaymentState> = _state.asStateFlow()
 
-    // Slides 9 and 13
+    // Slides 10 and 14
     suspend fun initiatePayment(amountMinor: Long, recipient: String): String {
         // Saved on the phone right away, so Pay can be tapped again for another payment while this one waits.
         val id = save(amountMinor, recipient)
@@ -83,7 +83,7 @@ class SafePaymentClient(
         payment.id
     }
 
-    // Slide 10
+    // Slide 11
     suspend fun retryWithBackoff(payment: PendingPayment) {
         var backoffMs = 1000L
         repeat(MAX_RETRIES) { attempt ->
@@ -107,7 +107,7 @@ class SafePaymentClient(
         enqueueRetryWorker(payment.id)
     }
 
-    // Slide 17
+    // Slide 18
     suspend fun reconcilePendingPayments() = exclusive {
         for (payment in dao.unsettled()) reconcile(payment, userConfirmed = false)
     }
