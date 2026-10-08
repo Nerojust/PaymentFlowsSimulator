@@ -105,6 +105,7 @@ class SafePaymentClientTest {
         assertEquals(PaymentState.Success, safeClient.state.value)
         assertEquals(1, harness.payment(id).retryCount)
         assertEquals(listOf(id), harness.ledger().map { it.idempotencyKey })
+        assertTrue(currentTime in 1000..1500) // it waited the first second (plus jitter) before the retry
     }
 
     @Test

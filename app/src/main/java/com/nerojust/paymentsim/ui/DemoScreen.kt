@@ -170,9 +170,10 @@ fun DemoScreen(viewModel: DemoViewModel = viewModel { DemoViewModel(AppDependenc
             Tab.PAYMENTS -> PaymentsTab(queue, ledger, modifier)
             Tab.LOG -> LogTab(events, modifier.padding(bottom = 12.dp))
         }
-        // At the top, not the usual bottom: down there a note sits on the Crash button and the status
-        // for the very seconds they are needed.
-        Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.TopCenter) {
+        // On Pay the note goes at the top: at the bottom it sits on the Crash button and the status for the
+        // very seconds they are needed. On Payments it is the other way round, the verdict line is at the top.
+        val noteAt = if (tab == Tab.PAYMENTS) Alignment.BottomCenter else Alignment.TopCenter
+        Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = noteAt) {
             SnackbarHost(snackbar)
         }
     }

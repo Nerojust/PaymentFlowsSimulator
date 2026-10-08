@@ -38,6 +38,7 @@ fun PaymentsTab(
     modifier: Modifier = Modifier,
 ) {
     val duplicates = remember(ledger) { duplicateChargeIds(ledger) }
+    val retries = queue.sumOf { it.retryCount }
 
     Column(
         modifier = modifier.verticalScroll(rememberScrollState()),
@@ -46,7 +47,12 @@ fun PaymentsTab(
         when {
             duplicates.isNotEmpty() -> Banner(CHARGED_TWICE, DeckColors.Failure)
             ledger.isEmpty() -> Banner("No charges yet", DeckColors.Neutral)
-            else -> Banner("Good: ${ledger.size} charge${if (ledger.size == 1) "" else "s"}, nothing charged twice", DeckColors.Fix)
+            else -> Banner(
+                "Good: ${ledger.size} charge${if (ledger.size == 1) "" else "s"}, nothing charged twice" +
+                    // The whole point of a safe retry, said out loud: it tried again and the count did not move.
+                    if (retries > 0) ", even though the app tried again $retries×" else "",
+                DeckColors.Fix,
+            )
         }
 
         Text("What your phone thinks (${queue.size})", style = MaterialTheme.typography.titleMedium)
@@ -75,7 +81,13 @@ fun PaymentsTab(
             val again = charge.chargeId in duplicates
             PaymentRow(
                 title = "${formatMinor(charge.amountMinor)} to ${charge.recipient}",
-                detail = "charge #${charge.chargeId} · " + (charge.idempotencyKey?.let { "key ${it.shortKey()}" } ?: "no key"),
+                detail = "charge #${charge.chargeId} · " + (charge.idempotencyKey?.let { "key ${it.shortKey()}" } ?: "no key") +
+                    // Two keys under one "Charged twice" looks like a bug unless the row says why it happened.
+                    when {
+                        !again -> ""
+                        charge.idempotencyKey != null -> "\nA new key each tap, so the bank saw a new payment"
+                        else -> "\nThe bank was not checking keys"
+                    },
                 pill = if (again) "Charged twice" else "Charged",
                 pillColor = if (again) DeckColors.Failure else DeckColors.Fix,
             )

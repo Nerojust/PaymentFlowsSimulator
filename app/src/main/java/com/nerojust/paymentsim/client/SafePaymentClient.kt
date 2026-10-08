@@ -83,10 +83,17 @@ class SafePaymentClient(
         payment.id
     }
 
-    // Slide 11
+    // Slide 11. The first send already happened in initiatePayment, so here the wait comes before each try:
+    // 1s, 2s, 4s, 8s, 16s, with a try after every wait.
     suspend fun retryWithBackoff(payment: PendingPayment) {
         var backoffMs = 1000L
         repeat(MAX_RETRIES) { attempt ->
+            log.log(
+                LogSource.CLIENT,
+                "That try did not work, waiting ${backoffMs / 1000}s before retry ${attempt + 1} of $MAX_RETRIES",
+            )
+            delay(backoffMs + Random.nextLong(0, 500))
+            backoffMs *= 2
             try {
                 dao.incrementRetryCount(payment.id)
                 // same idempotency key every time
@@ -96,12 +103,6 @@ class SafePaymentClient(
                 noteNetworkError(payment, e)
             }
             move(PaymentState.Retrying)
-            log.log(
-                LogSource.CLIENT,
-                "Try ${attempt + 1} of $MAX_RETRIES did not work, waiting ${backoffMs / 1000}s before the next try",
-            )
-            delay(backoffMs + Random.nextLong(0, 500))
-            backoffMs *= 2
         }
         markNeedsReconcile(payment)
         enqueueRetryWorker(payment.id)
